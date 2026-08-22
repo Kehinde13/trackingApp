@@ -10,5 +10,6 @@ export default defineConfig({
   datasource: {
     // `prisma dev` can start before the first local URL has been issued.
     url: process.env.DATABASE_URL,
+    shadowDatabaseUrl: process.env.SHADOW_DATABASE_URL,
   },
 });
