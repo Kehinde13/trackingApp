@@ -1,0 +1,77 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum ShipmentStatus {
+  PENDING
+  INFO_RECEIVED
+  PICKED_UP
+  IN_TRANSIT
+  CUSTOMS
+  OUT_FOR_DELIVERY
+  DELIVERED
+  DELAYED
+  EXCEPTION
+  RETURNED
+  CANCELLED
+}
+
+enum TrackingEventSource {
+  CARRIER
+  ADMIN
+  SYSTEM
+}
+
+model Shipment {
+  id                     String          @id @default(uuid())
+  publicToken            String          @unique
+  reference              String          @unique
+  recipientName          String?
+  carrierCode            String?
+  carrierName            String?
+  trackingNumber         String?
+  status                 ShipmentStatus  @default(PENDING)
+  originCity             String?
+  originCountryCode      String?
+  destinationCity        String?
+  destinationCountryCode String?
+  estimatedDeliveryAt    DateTime?
+  deliveredAt            DateTime?
+  createdAt              DateTime        @default(now())
+  updatedAt              DateTime        @updatedAt
+  trackingEvents         TrackingEvent[]
+
+  @@index([publicToken])
+  @@index([reference])
+  @@index([status])
+  @@index([trackingNumber])
+  @@index([carrierCode, trackingNumber])
+  @@index([createdAt])
+}
+
+model TrackingEvent {
+  id              String              @id @default(uuid())
+  shipmentId      String
+  source          TrackingEventSource
+  status          ShipmentStatus
+  description     String
+  location        String?
+  city            String?
+  countryCode     String?
+  occurredAt      DateTime
+  providerEventId String?
+  rawPayload      Json?
+  createdAt       DateTime            @default(now())
+  shipment        Shipment            @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+
+  @@unique([shipmentId, providerEventId])
+  @@index([shipmentId, occurredAt])
+  @@index([source])
+  @@index([status])
+  @@index([providerEventId])
+}

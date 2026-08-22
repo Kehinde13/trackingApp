@@ -1,0 +1,29 @@
+# dependencies
+/node_modules
+/src/generated/prisma
+
+# Next.js
+/.next/
+/out/
+
+# production
+/build
+
+# local environment files
+.env*
+!.env.example
+
+# logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# operating systems and editors
+.DS_Store
+Thumbs.db
+*.swp
+
+# TypeScript
+*.tsbuildinfo
+next-env.d.ts
