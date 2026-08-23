@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { getSafeInternalCallbackUrl, hasAdminRole } from "./auth-guards";
+import {
+  AdminAuthorizationError,
+  assertAdminRole,
+  getSafeInternalCallbackUrl,
+  hasAdminRole,
+} from "./auth-guards";
 
 describe("getSafeInternalCallbackUrl", () => {
   it("preserves safe internal callback URLs", () => {
@@ -31,4 +36,15 @@ describe("hasAdminRole", () => {
       expect(hasAdminRole(role)).toBe(false);
     },
   );
+});
+
+describe("assertAdminRole", () => {
+  it("allows administrators to perform protected mutations", () => {
+    expect(() => assertAdminRole("admin")).not.toThrow();
+  });
+
+  it("rejects non-admin package mutations", () => {
+    expect(() => assertAdminRole("user")).toThrow(AdminAuthorizationError);
+    expect(() => assertAdminRole(undefined)).toThrow(AdminAuthorizationError);
+  });
 });

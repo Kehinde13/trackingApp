@@ -158,11 +158,10 @@ Before completing a task, run at minimum:
 
 ## Current Scope
 
-The current implementation includes the project, shipment-domain database, and administrator authentication foundations.
+The current implementation includes the project, shipment-domain database, administrator authentication, and administrator package-management foundations.
 
 Do not implement the following until a later prompt requests them:
 
-- Admin dashboard
 - Carrier API integration
 - Carrier webhooks
 - Production deployment

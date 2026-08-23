@@ -46,11 +46,11 @@ model Shipment {
   updatedAt              DateTime        @updatedAt
   trackingEvents         TrackingEvent[]
 
+  @@unique([carrierCode, trackingNumber])
   @@index([publicToken])
   @@index([reference])
   @@index([status])
   @@index([trackingNumber])
-  @@index([carrierCode, trackingNumber])
   @@index([createdAt])
 }
 

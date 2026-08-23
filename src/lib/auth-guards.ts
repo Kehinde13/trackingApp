@@ -7,6 +7,17 @@ export function hasAdminRole(role: string | null | undefined): boolean {
   );
 }
 
+export class AdminAuthorizationError extends Error {
+  constructor() {
+    super("Administrator access is required");
+    this.name = "AdminAuthorizationError";
+  }
+}
+
+export function assertAdminRole(role: string | null | undefined): void {
+  if (!hasAdminRole(role)) throw new AdminAuthorizationError();
+}
+
 export function getSafeInternalCallbackUrl(
   candidate: string | null | undefined,
   fallback = "/admin",
