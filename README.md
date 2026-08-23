@@ -38,3 +38,15 @@ shell history:
 `npx auth@latest create-admin --config src/lib/auth.ts --email you@example.com --name "ParcelTrack Admin" --role admin`
 
 Public sign-up is disabled. Administrators sign in at `/admin/login`.
+
+## Public tracking deployment boundary
+
+The initial production target is direct Vercel with no proxy in front. Public
+rate limiting resolves client addresses with the official `@vercel/functions`
+helper and immediately stores only a domain-separated HMAC made with
+`BETTER_AUTH_SECRET`. Local development uses one shared identity. Vercel
+requests without an IP use a shared five-request fail-safe bucket; production
+outside Vercel fails closed.
+
+Adding Cloudflare, a CDN, load balancer, or another reverse proxy requires a
+fresh client-IP trust review before public tracking can be enabled there.

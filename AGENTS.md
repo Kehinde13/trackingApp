@@ -158,13 +158,17 @@ Before completing a task, run at minimum:
 
 ## Current Scope
 
-The current implementation includes the project, shipment-domain database, administrator authentication, package management, and manual administrator tracking updates.
+The current implementation includes the project, shipment-domain database, administrator authentication, package management, manual administrator updates, and private public-token tracking.
 
 Do not implement the following until a later prompt requests them:
 
 - Carrier API integration
 - Carrier webhooks
 - Production deployment
+
+## Deployment Trust Boundary
+
+The initial production target is Vercel with no proxy in front. Public client identity uses Vercel's official request helper. Adding a CDN, load balancer, or reverse proxy requires revisiting and testing client-IP resolution before deployment.
 
 ## Database Commands
 

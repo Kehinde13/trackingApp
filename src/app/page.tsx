@@ -1,3 +1,5 @@
+import { TrackingForm } from "@/app/tracking-form";
+
 const features = [
   {
     title: "Worldwide Tracking",
@@ -73,34 +75,7 @@ export default function Home() {
                 dispatch to your doorstep.
               </p>
 
-              <form className="tracking-form" action="#" method="get">
-                <label htmlFor="tracking-reference">Tracking reference</label>
-                <div className="input-row">
-                  <div className="input-wrap">
-                    <svg viewBox="0 0 24 24" aria-hidden="true">
-                      <path d="m3.5 7 8.5-4 8.5 4-8.5 4-8.5-4Z" />
-                      <path d="M3.5 7v10L12 21l8.5-4V7M12 11v10" />
-                    </svg>
-                    <input
-                      id="tracking-reference"
-                      name="trackingReference"
-                      type="text"
-                      autoComplete="off"
-                      placeholder="e.g. PT-4829-1756"
-                      aria-describedby="tracking-hint"
-                    />
-                  </div>
-                  <button type="submit">
-                    Track package
-                    <svg viewBox="0 0 20 20" aria-hidden="true">
-                      <path d="m7 4 6 6-6 6" />
-                    </svg>
-                  </button>
-                </div>
-                <p id="tracking-hint">
-                  You’ll find your reference in the private link shared with you.
-                </p>
-              </form>
+              <TrackingForm />
             </div>
 
             <div className="journey-visual" aria-hidden="true">
@@ -173,4 +148,3 @@ export default function Home() {
     </div>
   );
 }
-

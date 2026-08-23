@@ -769,6 +769,28 @@ select:focus-visible {
 .timeline-time,
 .timeline-actor { display: flex; flex-wrap: wrap; gap: 5px 16px; color: #64748b; font-size: 0.82rem; }
 
+.public-track-page { min-height: 100vh; background: #f4f7f6; color: #132238; padding-bottom: 40px; }
+.public-track-header { display: flex; justify-content: space-between; align-items: center; padding: 18px clamp(20px, 6vw, 80px); background: #fff; border-bottom: 1px solid #dce6e2; }
+.public-track-header a { color: #155c49; font-size: 1.25rem; font-weight: 800; text-decoration: none; }
+.public-status-hero, .public-summary, .public-timeline, .public-attention, .public-progress { width: min(920px, calc(100% - 32px)); margin: 24px auto 0; }
+.public-status-hero { border-radius: 22px; padding: clamp(24px, 6vw, 52px); color: #fff; background: linear-gradient(135deg, #155c49, #218168); }
+.public-status-hero h1 { margin: 6px 0; font-size: clamp(2rem, 7vw, 4rem); }
+.public-status-hero button, .public-track-state button { margin-top: 18px; border: 1px solid rgba(255,255,255,.5); border-radius: 999px; padding: 10px 16px; background: #fff; color: #155c49; font-weight: 700; }
+.public-progress { display: grid; grid-template-columns: repeat(7, 1fr); list-style: none; padding: 18px; border-radius: 16px; background: #fff; overflow-x: auto; }
+.public-progress li { min-width: 105px; color: #7a8794; font-size: .78rem; text-align: center; }
+.public-progress li span { display: block; color: #9eaaa6; font-size: 1.15rem; }
+.public-progress li.complete { color: #155c49; font-weight: 700; }
+.public-summary, .public-timeline, .public-attention { border: 1px solid #dce6e2; border-radius: 18px; background: #fff; padding: clamp(20px, 4vw, 32px); }
+.public-summary dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+.public-summary dl div { border-bottom: 1px solid #edf1ef; padding-bottom: 12px; }
+.public-summary dt { color: #6b7785; font-size: .82rem; }
+.public-summary dd { margin: 5px 0 0; font-weight: 700; }
+.public-timeline ol { list-style: none; padding: 8px 0 0; }
+.public-timeline li { display: grid; grid-template-columns: 18px 1fr; gap: 12px; padding: 16px 0; border-bottom: 1px solid #edf1ef; }
+.public-track-footer { width: min(920px, calc(100% - 32px)); margin: 30px auto 0; color: #64748b; text-align: center; }
+.public-track-state { min-height: 70vh; display: grid; place-content: center; gap: 12px; padding: 24px; text-align: center; }
+@media (max-width: 600px) { .public-track-header span { display: none; } .public-summary dl { grid-template-columns: 1fr; } }
+
 .detail-header { align-items: center; }
 .detail-grid { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(260px, 0.7fr); gap: 20px; }
 .metadata-list { margin: 22px 0 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 25px; }
