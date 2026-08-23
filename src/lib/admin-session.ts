@@ -4,11 +4,12 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { auth } from "@/lib/auth";
-import { assertAdminRole, hasAdminRole } from "@/lib/auth-guards";
+import { AdminAuthorizationError, assertAdminRole, hasAdminRole } from "@/lib/auth-guards";
 
 export async function requireAdminForMutation() {
   const session = await auth.api.getSession({ headers: await headers() });
-  assertAdminRole(session?.user.role);
+  if (!session) throw new AdminAuthorizationError();
+  assertAdminRole(session.user.role);
   return session;
 }
 

@@ -758,6 +758,16 @@ select:focus-visible {
 }
 
 .package-form-actions { margin-top: 26px; }
+.manual-update-card { margin-bottom: 18px; }
+.manual-update-form textarea,
+.manual-update-form select { width: 100%; border: 1px solid #cbd8e6; border-radius: 10px; background: #fff; color: #132238; font: inherit; padding: 11px 12px; }
+.manual-update-form textarea { resize: vertical; }
+.manual-update-form textarea:focus-visible,
+.manual-update-form select:focus-visible { border-color: #1e6a55; outline: 3px solid rgba(30, 106, 85, 0.18); outline-offset: 1px; }
+.package-field-wide { grid-column: 1 / -1; }
+.form-success { margin: 18px 0; border: 1px solid #86c79a; border-radius: 10px; background: #eefaf1; color: #185c2d; padding: 12px 14px; }
+.timeline-time,
+.timeline-actor { display: flex; flex-wrap: wrap; gap: 5px 16px; color: #64748b; font-size: 0.82rem; }
 
 .detail-header { align-items: center; }
 .detail-grid { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(260px, 0.7fr); gap: 20px; }

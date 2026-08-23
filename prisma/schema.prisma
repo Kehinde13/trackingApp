@@ -67,29 +67,33 @@ model TrackingEvent {
   providerEventId String?
   rawPayload      Json?
   createdAt       DateTime            @default(now())
+  createdById     String?
   shipment        Shipment            @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  createdBy       User?               @relation(fields: [createdById], references: [id], onDelete: SetNull)
 
   @@unique([shipmentId, providerEventId])
   @@index([shipmentId, occurredAt])
   @@index([source])
   @@index([status])
   @@index([providerEventId])
+  @@index([createdById])
 }
 
 model User {
-  id            String    @id
-  name          String
-  email         String
-  emailVerified Boolean   @default(false)
-  image         String?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  role          String?
-  banned        Boolean?  @default(false)
-  banReason     String?
-  banExpires    DateTime?
-  sessions      Session[]
-  accounts      Account[]
+  id             String          @id
+  name           String
+  email          String
+  emailVerified  Boolean         @default(false)
+  image          String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  role           String?
+  banned         Boolean?        @default(false)
+  banReason      String?
+  banExpires     DateTime?
+  sessions       Session[]
+  accounts       Account[]
+  trackingEvents TrackingEvent[]
 
   @@unique([email])
   @@map("user")

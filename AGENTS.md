@@ -158,7 +158,7 @@ Before completing a task, run at minimum:
 
 ## Current Scope
 
-The current implementation includes the project, shipment-domain database, administrator authentication, and administrator package-management foundations.
+The current implementation includes the project, shipment-domain database, administrator authentication, package management, and manual administrator tracking updates.
 
 Do not implement the following until a later prompt requests them:
 

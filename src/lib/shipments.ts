@@ -118,7 +118,7 @@ export async function getShipmentDetails(id: string) {
       createdAt: true,
       updatedAt: true,
       trackingEvents: {
-        orderBy: { occurredAt: "asc" },
+        orderBy: [{ occurredAt: "asc" }, { createdAt: "asc" }, { id: "asc" }],
         select: {
           id: true,
           source: true,
@@ -129,6 +129,7 @@ export async function getShipmentDetails(id: string) {
           countryCode: true,
           occurredAt: true,
           createdAt: true,
+          createdBy: { select: { id: true, name: true } },
         },
       },
     },
