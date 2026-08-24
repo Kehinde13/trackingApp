@@ -11,6 +11,7 @@ import {
   carrierEventId,
   trackingRequestSchema,
   type NormalizedCarrierEvent,
+  type TrackingInfo,
   type TrackingProvider,
 } from "@/lib/tracking-provider";
 import { createTrackingProvider } from "@/lib/tracking-provider-config";
@@ -83,6 +84,62 @@ function validEvent(event: NormalizedCarrierEvent, now: number) {
   return Number.isFinite(timestamp) && timestamp <= now + MAX_EVENT_FUTURE_MS && timestamp >= now - MAX_EVENT_AGE_MS;
 }
 
+type CarrierImportShipment = {
+  id: string;
+  trackingNumber: string;
+  providerCarrierCode: string | null;
+};
+
+export async function importCarrierTrackingInfo(
+  tx: Prisma.TransactionClient,
+  shipment: CarrierImportShipment,
+  providerName: string,
+  info: TrackingInfo,
+  synchronizedAt = new Date(),
+) {
+  const now = synchronizedAt.getTime();
+  const recognized = info.events
+    .filter((event) => validEvent(event, now))
+    .map((event) => ({ event, status: map17TrackStatus(event.providerStatus, event.providerSubStatus) }))
+    .filter((item): item is { event: NormalizedCarrierEvent; status: ShipmentStatus } => item.status !== null);
+  const unknown = info.events.some(
+    (event) => validEvent(event, now) && map17TrackStatus(event.providerStatus, event.providerSubStatus) === null,
+  );
+  const warning = unknown ? TRACKING_ERROR_CODES.UNKNOWN_STATUS : null;
+  const createResult = await tx.trackingEvent.createMany({
+    data: recognized.map(({ event, status }) => ({
+      shipmentId: shipment.id,
+      source: TrackingEventSource.CARRIER,
+      status,
+      description: event.description,
+      location: event.location,
+      city: event.city,
+      countryCode: event.countryCode,
+      occurredAt: event.occurredAt,
+      providerEventId: carrierEventId(providerName, shipment.trackingNumber, event),
+    })),
+    skipDuplicates: true,
+  });
+  const newest = await tx.trackingEvent.findFirst({
+    where: { shipmentId: shipment.id },
+    orderBy: [{ occurredAt: "desc" }, { createdAt: "desc" }, { id: "desc" }],
+    select: { status: true, occurredAt: true },
+  });
+  const data: Prisma.ShipmentUpdateInput = {
+    providerCarrierCode: info.carrierCode ?? shipment.providerCarrierCode,
+    carrierConnectionStatus: CarrierConnectionStatus.ACTIVE,
+    carrierLastSuccessfulSyncAt: synchronizedAt,
+    carrierLastErrorCode: warning,
+    carrierLastErrorAt: warning ? synchronizedAt : null,
+  };
+  if (newest) {
+    data.status = newest.status;
+    if (newest.status === ShipmentStatus.DELIVERED) data.deliveredAt = newest.occurredAt;
+  }
+  await tx.shipment.update({ where: { id: shipment.id }, data });
+  return { imported: createResult.count, warning };
+}
+
 export async function syncShipmentTracking(
   shipmentId: string,
   provider: TrackingProvider = createTrackingProvider(),
@@ -103,51 +160,16 @@ export async function syncShipmentTracking(
   try { info = await provider.getTrackingInfo(request.data); }
   catch (error: unknown) { await setConnectionError(shipmentId, error); throw new CarrierTrackingOperationError(safeErrorCode(error)); }
 
-  const now = Date.now();
-  const recognized = info.events
-    .filter((event) => validEvent(event, now))
-    .map((event) => ({ event, status: map17TrackStatus(event.providerStatus, event.providerSubStatus) }))
-    .filter((item): item is { event: NormalizedCarrierEvent; status: ShipmentStatus } => item.status !== null);
-  const unknown = info.events.some((event) => validEvent(event, now) && map17TrackStatus(event.providerStatus, event.providerSubStatus) === null);
-  const warning = unknown ? TRACKING_ERROR_CODES.UNKNOWN_STATUS : null;
-
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
-      const imported = await prisma.$transaction(async (tx) => {
-        const createResult = await tx.trackingEvent.createMany({
-          data: recognized.map(({ event, status }) => ({
-            shipmentId,
-            source: TrackingEventSource.CARRIER,
-            status,
-            description: event.description,
-            location: event.location,
-            city: event.city,
-            countryCode: event.countryCode,
-            occurredAt: event.occurredAt,
-            providerEventId: carrierEventId(provider.name, request.data.trackingNumber, event),
-          })),
-          skipDuplicates: true,
-        });
-        const newest = await tx.trackingEvent.findFirst({
-          where: { shipmentId },
-          orderBy: [{ occurredAt: "desc" }, { createdAt: "desc" }, { id: "desc" }],
-          select: { status: true, occurredAt: true },
-        });
-        const data: Prisma.ShipmentUpdateInput = {
-          providerCarrierCode: info.carrierCode ?? shipment.providerCarrierCode,
-          carrierConnectionStatus: CarrierConnectionStatus.ACTIVE,
-          carrierLastSuccessfulSyncAt: new Date(),
-          carrierLastErrorCode: warning,
-          carrierLastErrorAt: warning ? new Date() : null,
-        };
-        if (newest) {
-          data.status = newest.status;
-          if (newest.status === ShipmentStatus.DELIVERED) data.deliveredAt = newest.occurredAt;
-        }
-        await tx.shipment.update({ where: { id: shipmentId }, data });
-        return createResult.count;
-      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
-      return { imported, warning };
+      return await prisma.$transaction(
+        (tx) => importCarrierTrackingInfo(tx, {
+          id: shipmentId,
+          trackingNumber: request.data.trackingNumber,
+          providerCarrierCode: shipment.providerCarrierCode,
+        }, provider.name, info),
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      );
     } catch (error: unknown) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034" && attempt < 2) continue;
       throw error;

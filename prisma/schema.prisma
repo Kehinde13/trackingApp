@@ -35,6 +35,13 @@ enum CarrierConnectionStatus {
   STOPPED
 }
 
+enum ProviderWebhookOutcome {
+  PROCESSED
+  UNMATCHED
+  UNSUPPORTED
+  STOPPED
+}
+
 model Shipment {
   id                          String                  @id @default(uuid())
   publicToken                 String                  @unique
@@ -184,4 +191,18 @@ model PublicTrackingRateLimit {
   updatedAt    DateTime @updatedAt
 
   @@index([expiresAt])
+}
+
+model ProviderWebhookReceipt {
+  id          String                 @id @default(uuid())
+  provider    String
+  payloadHash String
+  eventType   String
+  outcome     ProviderWebhookOutcome
+  receivedAt  DateTime               @default(now())
+  processedAt DateTime
+
+  @@unique([provider, payloadHash])
+  @@index([receivedAt])
+  @@index([processedAt])
 }

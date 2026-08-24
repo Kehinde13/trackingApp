@@ -58,9 +58,47 @@ idempotent and carrier events remain visibly distinct from administrator events.
 Unknown provider statuses are recorded as a safe warning and do not change the
 shipment status.
 
-This checkpoint deliberately has no webhooks, cron jobs, or scheduled polling.
+This checkpoint deliberately has no cron jobs or scheduled polling.
 For the initial direct-Vercel deployment, leave 17TRACK IP allowlisting disabled
 unless Vercel Static IPs or another stable outbound-IP solution is configured.
+
+## 17TRACK webhooks
+
+Automatic carrier updates arrive at `POST /api/webhooks/17track`. This public
+machine endpoint does not use administrator cookies, CORS, or the public
+tracking rate limiter. It reads at most 512 KiB from the exact raw UTF-8 body
+and verifies the `sign` header before JSON parsing using
+`SHA-256(rawBody + "/" + TRACKING_WEBHOOK_SECRET)` and constant-time comparison.
+The webhook security key is independent from `TRACKING_PROVIDER_API_KEY` and
+must only exist in server-side environment configuration.
+
+Authenticated `TRACKING_UPDATED` and `TRACKING_STOPPED` events are supported.
+Updates only match shipments already connected to 17TRACK; they never create a
+shipment. Unknown event types and unmatched shipments receive a generic 200
+acknowledgement. Responses never contain shipment data. Authentication,
+validation, oversize, and temporary database failures return generic 401, 400,
+413, and 503 responses respectively.
+
+Each authenticated payload has a minimal receipt keyed by a domain-separated
+hash of the exact body. This provides idempotent replay handling but is not
+proof that a payload is recent because the documented signature has no
+timestamp. Receipts contain neither tracking numbers nor payloads and are
+opportunistically removed after 30 days. Event uniqueness remains a second
+deduplication layer. Provider payloads, signatures, headers, addresses, phone
+data, coordinates, recipient data, and secrets are not persisted.
+
+Deployment steps:
+
+1. Deploy to the final HTTPS Vercel domain.
+2. Generate or retrieve the webhook security key in the 17TRACK dashboard.
+3. Save it as `TRACKING_WEBHOOK_SECRET` in Vercel environment variables.
+4. Redeploy.
+5. Configure `https://your-domain.example/api/webhooks/17track` in 17TRACK.
+6. Run the dashboard webhook tester and confirm HTTP 200.
+
+Never paste the webhook secret into documentation, Git, screenshots, issue
+reports, or chat. This implementation does not add polling, cron, queues, or a
+webhook configuration interface.
 
 ## Public tracking deployment boundary
 

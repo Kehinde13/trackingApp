@@ -158,12 +158,12 @@ Before completing a task, run at minimum:
 
 ## Current Scope
 
-The current implementation includes the project, shipment-domain database, administrator authentication, package management, manual administrator updates, private public-token tracking, and a provider-neutral carrier adapter with protected manual registration/synchronization for 17TRACK.
+The current implementation includes the project, shipment-domain database, administrator authentication, package management, manual administrator updates, private public-token tracking, a provider-neutral carrier adapter, and signed 17TRACK webhook ingestion.
 
 Do not implement the following until a later prompt requests them:
 
-- Carrier webhooks
 - Background carrier polling or cron jobs
+- Message queues
 - Production deployment
 
 ## Carrier Provider Boundary
@@ -171,7 +171,11 @@ Do not implement the following until a later prompt requests them:
 - Carrier modules are server-only and accessed through the replaceable provider interface.
 - `TRACKING_PROVIDER` defaults to `disabled`; `17track` also requires a server-side `TRACKING_PROVIDER_API_KEY`.
 - Never log, persist, or expose provider API keys, raw headers, complete responses, or provider diagnostic messages.
-- Registration and synchronization are administrator-only manual operations. Webhooks and scheduled polling are not implemented yet.
+- Registration and manual synchronization are administrator-only operations. Scheduled polling is not implemented.
+- `POST /api/webhooks/17track` is the only public carrier webhook route. It authenticates the exact bounded raw body with the independent `TRACKING_WEBHOOK_SECRET` before parsing.
+- Webhook receipts store only provider, domain-separated payload hash, safe event type/outcome, and timestamps. They expire after 30 days and are replay protection, not proof of freshness.
+- Supported webhook events are `TRACKING_UPDATED` and `TRACKING_STOPPED`; unmatched and unsupported events are acknowledged without exposing shipment data.
+- Do not log webhook bodies, signatures, tracking numbers, locations, descriptions, public tokens, recipient data, or secrets.
 - Keep 17TRACK IP allowlisting disabled for initial direct-Vercel deployment unless stable outbound IPs are configured.
 
 ## Deployment Trust Boundary

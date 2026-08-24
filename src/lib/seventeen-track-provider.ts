@@ -57,18 +57,20 @@ const eventSchema = z.object({
   sub_status: nullableString,
   address: z.object({ country: nullableString, city: nullableString }).nullable().optional(),
 });
+export const seventeenTrackTrackingItemSchema = z.object({
+  number: z.string().regex(/^[A-Za-z0-9-]{5,50}$/),
+  carrier: z.number().int().positive(),
+  track_info: z.object({
+    tracking: z.object({
+      providers: z.array(z.object({ events: z.array(eventSchema) })),
+    }),
+  }).nullable(),
+});
+
 const trackingResponseSchema = z.object({
   code: z.number().int(),
   data: z.object({
-    accepted: z.array(z.object({
-      number: z.string(),
-      carrier: z.number().int().positive(),
-      track_info: z.object({
-        tracking: z.object({
-          providers: z.array(z.object({ events: z.array(eventSchema) })),
-        }),
-      }).nullable(),
-    })),
+    accepted: z.array(seventeenTrackTrackingItemSchema),
     rejected: z.array(rejectedSchema),
   }),
 });
@@ -125,6 +127,32 @@ function httpError(status: number): TrackingProviderError {
 
 export function isRetryableStatus(status: number): boolean {
   return status === 429 || status === 500 || status === 502 || status === 503 || status === 504;
+}
+
+export function normalize17TrackTrackingItem(
+  item: z.infer<typeof seventeenTrackTrackingItemSchema>,
+) {
+  const events: NormalizedCarrierEvent[] = [];
+  for (const provider of item.track_info?.tracking.providers ?? []) {
+    for (const event of provider.events) {
+      const timestamp = event.time_utc ?? event.time_iso;
+      const occurredAt = timestamp ? new Date(timestamp) : null;
+      const description = safeText(event.description, 500);
+      if (!occurredAt || Number.isNaN(occurredAt.getTime()) || !description) continue;
+      events.push({
+        occurredAt,
+        providerStatus: safeProviderCode(event.stage),
+        providerSubStatus: safeProviderCode(event.sub_status),
+        description,
+        location: safeText(event.location, 160),
+        city: safeText(event.address?.city, 100),
+        countryCode: /^[A-Za-z]{2}$/.test(event.address?.country ?? "")
+          ? event.address!.country!.toUpperCase()
+          : undefined,
+      });
+    }
+  }
+  return { carrierCode: String(item.carrier), events };
 }
 
 export class SeventeenTrackProvider implements TrackingProvider {
@@ -195,24 +223,6 @@ export class SeventeenTrackProvider implements TrackingProvider {
     }
     const accepted = parsed.data.data.accepted.find((item) => item.number === input.trackingNumber);
     if (!accepted) throw new TrackingProviderError(TRACKING_ERROR_CODES.REJECTED);
-    const events: NormalizedCarrierEvent[] = [];
-    for (const provider of accepted.track_info?.tracking.providers ?? []) {
-      for (const event of provider.events) {
-        const timestamp = event.time_utc ?? event.time_iso;
-        const occurredAt = timestamp ? new Date(timestamp) : null;
-        const description = safeText(event.description, 500);
-        if (!occurredAt || Number.isNaN(occurredAt.getTime()) || !description) continue;
-        events.push({
-          occurredAt,
-          providerStatus: safeProviderCode(event.stage),
-          providerSubStatus: safeProviderCode(event.sub_status),
-          description,
-          location: safeText(event.location, 160),
-          city: safeText(event.address?.city, 100),
-          countryCode: /^[A-Za-z]{2}$/.test(event.address?.country ?? "") ? event.address!.country!.toUpperCase() : undefined,
-        });
-      }
-    }
-    return { carrierCode: String(accepted.carrier), events };
+    return normalize17TrackTrackingItem(accepted);
   }
 }
