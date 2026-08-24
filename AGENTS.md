@@ -158,13 +158,21 @@ Before completing a task, run at minimum:
 
 ## Current Scope
 
-The current implementation includes the project, shipment-domain database, administrator authentication, package management, manual administrator updates, and private public-token tracking.
+The current implementation includes the project, shipment-domain database, administrator authentication, package management, manual administrator updates, private public-token tracking, and a provider-neutral carrier adapter with protected manual registration/synchronization for 17TRACK.
 
 Do not implement the following until a later prompt requests them:
 
-- Carrier API integration
 - Carrier webhooks
+- Background carrier polling or cron jobs
 - Production deployment
+
+## Carrier Provider Boundary
+
+- Carrier modules are server-only and accessed through the replaceable provider interface.
+- `TRACKING_PROVIDER` defaults to `disabled`; `17track` also requires a server-side `TRACKING_PROVIDER_API_KEY`.
+- Never log, persist, or expose provider API keys, raw headers, complete responses, or provider diagnostic messages.
+- Registration and synchronization are administrator-only manual operations. Webhooks and scheduled polling are not implemented yet.
+- Keep 17TRACK IP allowlisting disabled for initial direct-Vercel deployment unless stable outbound IPs are configured.
 
 ## Deployment Trust Boundary
 

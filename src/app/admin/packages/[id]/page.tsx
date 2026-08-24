@@ -4,6 +4,8 @@ import { notFound } from "next/navigation";
 import { addManualUpdateAction } from "./manual-update-actions";
 import { ManualUpdateForm } from "./manual-update-form";
 import { INITIAL_MANUAL_UPDATE_STATE } from "./manual-update-state";
+import { registerCarrierAction, syncCarrierAction } from "./carrier-tracking-actions";
+import { CarrierTrackingControls } from "./carrier-tracking-controls";
 import { StatusBadge } from "@/app/admin/packages/status-badge";
 import { requireAdminPage } from "@/lib/admin-session";
 import { getStatusPresentation } from "@/lib/shipment-domain";
@@ -22,6 +24,9 @@ export default async function PackageDetailsPage({ params }: PackageDetailsPageP
   const shipment = await getShipmentDetails(id);
   if (!shipment) notFound();
   const manualUpdateAction = addManualUpdateAction.bind(null, shipment.id);
+  const registerAction = registerCarrierAction.bind(null, shipment.id);
+  const syncAction = syncCarrierAction.bind(null, shipment.id);
+  const providerEnabled = process.env.TRACKING_PROVIDER === "17track" && Boolean(process.env.TRACKING_PROVIDER_API_KEY);
 
   return (
     <main className="admin-content-page">
@@ -35,6 +40,19 @@ export default async function PackageDetailsPage({ params }: PackageDetailsPageP
           <div><dt>Recipient</dt><dd>{show(shipment.recipientName)}</dd></div><div><dt>Carrier</dt><dd>{shipment.carrierName || shipment.carrierCode || "Not connected"}</dd></div><div><dt>Carrier code</dt><dd>{show(shipment.carrierCode)}</dd></div><div><dt>Tracking number</dt><dd className="tracking-full">{show(shipment.trackingNumber)}</dd></div><div><dt>Origin</dt><dd>{place(shipment.originCity, shipment.originCountryCode)}</dd></div><div><dt>Destination</dt><dd>{place(shipment.destinationCity, shipment.destinationCountryCode)}</dd></div><div><dt>Estimated delivery</dt><dd>{shipment.estimatedDeliveryAt ? shipment.estimatedDeliveryAt.toLocaleDateString("en", { dateStyle: "long" }) : "Not provided"}</dd></div><div><dt>Current status</dt><dd>{getStatusPresentation(shipment.status).label}</dd></div><div><dt>Last updated</dt><dd>{dateTime(shipment.updatedAt)}</dd></div>
         </dl></article>
         <aside className="content-card private-link-card"><h2>Private tracking destination</h2><code>/track/{shipment.publicToken}</code><p>The customer tracking page is not live yet. It will be implemented in the next checkpoint.</p></aside>
+      </section>
+      <section className="content-card carrier-tracking-card" aria-labelledby="carrier-tracking-title">
+        <div className="panel-heading"><div><h2 id="carrier-tracking-title">Carrier tracking</h2><p>Register this tracking number and import carrier updates on demand.</p></div></div>
+        {!providerEnabled ? <p className="form-message">Carrier tracking is disabled. Configure the server-side provider and API key to enable it.</p> : null}
+        <dl className="metadata-list">
+          <div><dt>Provider</dt><dd>{shipment.trackingProvider ?? (providerEnabled ? "17track" : "Disabled")}</dd></div>
+          <div><dt>Connection status</dt><dd>{shipment.carrierConnectionStatus.replaceAll("_", " ")}</dd></div>
+          <div><dt>Provider carrier code</dt><dd>{show(shipment.providerCarrierCode)}</dd></div>
+          <div><dt>Registered</dt><dd>{shipment.carrierRegisteredAt ? dateTime(shipment.carrierRegisteredAt) : "Not registered"}</dd></div>
+          <div><dt>Last synchronized</dt><dd>{shipment.carrierLastSuccessfulSyncAt ? dateTime(shipment.carrierLastSuccessfulSyncAt) : "Never"}</dd></div>
+          <div><dt>Safe error state</dt><dd>{shipment.carrierLastErrorCode ?? "None"}</dd></div>
+        </dl>
+        {providerEnabled ? <CarrierTrackingControls registerAction={registerAction} syncAction={syncAction} initialState={{ success: false, message: "" }} canRegister={shipment.carrierConnectionStatus !== "ACTIVE"} canSync={shipment.carrierConnectionStatus === "ACTIVE"} defaultCarrierCode={shipment.providerCarrierCode ?? ""} /> : null}
       </section>
       <section className="content-card manual-update-card"><ManualUpdateForm action={manualUpdateAction} initialState={INITIAL_MANUAL_UPDATE_STATE} /></section>
       <section className="content-card timeline-card" aria-labelledby="timeline-title">

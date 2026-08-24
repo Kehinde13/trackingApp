@@ -39,6 +39,29 @@ shell history:
 
 Public sign-up is disabled. Administrators sign in at `/admin/login`.
 
+## Carrier tracking providers
+
+Carrier integration is isolated behind a server-only provider interface. The
+current implementations are a disabled provider, the 17TRACK Tracking API v2.4
+adapter, and a quota-free fake provider for automated tests. No provider key,
+raw response, request header, or internal diagnostic field is returned publicly.
+
+Local development defaults to `TRACKING_PROVIDER="disabled"`. To enable
+17TRACK, set `TRACKING_PROVIDER="17track"` and set
+`TRACKING_PROVIDER_API_KEY` to the secret API key in the local or deployment
+environment. Never put a real value in `.env.example` or a tracked file.
+
+From a protected package-detail page, an administrator registers an eligible
+tracking number (optionally supplying the numeric 17TRACK carrier code), then
+uses **Sync now** to import immutable carrier events. Synchronization is
+idempotent and carrier events remain visibly distinct from administrator events.
+Unknown provider statuses are recorded as a safe warning and do not change the
+shipment status.
+
+This checkpoint deliberately has no webhooks, cron jobs, or scheduled polling.
+For the initial direct-Vercel deployment, leave 17TRACK IP allowlisting disabled
+unless Vercel Static IPs or another stable outbound-IP solution is configured.
+
 ## Public tracking deployment boundary
 
 The initial production target is direct Vercel with no proxy in front. Public

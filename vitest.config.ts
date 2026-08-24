@@ -13,5 +13,8 @@ export default defineConfig({
   },
   test: {
     environment: "node",
+    exclude: process.env.RUN_DB_TESTS
+      ? ["**/node_modules/**"]
+      : ["**/node_modules/**", "**/*.integration.test.ts"],
   },
 });

@@ -27,30 +27,46 @@ enum TrackingEventSource {
   SYSTEM
 }
 
+enum CarrierConnectionStatus {
+  UNLINKED
+  REGISTERING
+  ACTIVE
+  ERROR
+  STOPPED
+}
+
 model Shipment {
-  id                     String          @id @default(uuid())
-  publicToken            String          @unique
-  reference              String          @unique
-  recipientName          String?
-  carrierCode            String?
-  carrierName            String?
-  trackingNumber         String?
-  status                 ShipmentStatus  @default(PENDING)
-  originCity             String?
-  originCountryCode      String?
-  destinationCity        String?
-  destinationCountryCode String?
-  estimatedDeliveryAt    DateTime?
-  deliveredAt            DateTime?
-  createdAt              DateTime        @default(now())
-  updatedAt              DateTime        @updatedAt
-  trackingEvents         TrackingEvent[]
+  id                          String                  @id @default(uuid())
+  publicToken                 String                  @unique
+  reference                   String                  @unique
+  recipientName               String?
+  carrierCode                 String?
+  carrierName                 String?
+  trackingNumber              String?
+  trackingProvider            String?
+  providerCarrierCode         String?
+  carrierConnectionStatus     CarrierConnectionStatus @default(UNLINKED)
+  carrierRegisteredAt         DateTime?
+  carrierLastSuccessfulSyncAt DateTime?
+  carrierLastErrorCode        String?
+  carrierLastErrorAt          DateTime?
+  status                      ShipmentStatus          @default(PENDING)
+  originCity                  String?
+  originCountryCode           String?
+  destinationCity             String?
+  destinationCountryCode      String?
+  estimatedDeliveryAt         DateTime?
+  deliveredAt                 DateTime?
+  createdAt                   DateTime                @default(now())
+  updatedAt                   DateTime                @updatedAt
+  trackingEvents              TrackingEvent[]
 
   @@unique([carrierCode, trackingNumber])
   @@index([publicToken])
   @@index([reference])
   @@index([status])
   @@index([trackingNumber])
+  @@index([trackingProvider, carrierConnectionStatus])
   @@index([createdAt])
 }
 
