@@ -1,21 +1,28 @@
 import "server-only";
 
 import { PrismaPg } from "@prisma/adapter-pg";
+import { Pool } from "pg";
 
 import { PrismaClient } from "@/generated/prisma/client";
+import { getServerEnvironment } from "@/lib/env";
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
 };
 
 function createPrismaClient(): PrismaClient {
-  const connectionString = process.env.DATABASE_URL;
+  const environment = getServerEnvironment();
+  const connectionString = environment.databaseUrl;
 
   if (!connectionString) {
     throw new Error("DATABASE_URL is not configured");
   }
 
-  const adapter = new PrismaPg({ connectionString });
+  const pool = new Pool({
+    connectionString,
+    max: environment.databasePoolMax,
+  });
+  const adapter = new PrismaPg(pool);
   return new PrismaClient({ adapter });
 }
 

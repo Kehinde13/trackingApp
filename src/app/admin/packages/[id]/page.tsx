@@ -10,6 +10,7 @@ import { StatusBadge } from "@/app/admin/packages/status-badge";
 import { requireAdminPage } from "@/lib/admin-session";
 import { getStatusPresentation } from "@/lib/shipment-domain";
 import { getShipmentDetails } from "@/lib/shipments";
+import { getServerEnvironment } from "@/lib/env";
 
 type PackageDetailsPageProps = { params: Promise<{ id: string }> };
 
@@ -26,7 +27,8 @@ export default async function PackageDetailsPage({ params }: PackageDetailsPageP
   const manualUpdateAction = addManualUpdateAction.bind(null, shipment.id);
   const registerAction = registerCarrierAction.bind(null, shipment.id);
   const syncAction = syncCarrierAction.bind(null, shipment.id);
-  const providerEnabled = process.env.TRACKING_PROVIDER === "17track" && Boolean(process.env.TRACKING_PROVIDER_API_KEY);
+  const environment = getServerEnvironment();
+  const providerEnabled = environment.trackingProvider === "17track" && Boolean(environment.trackingProviderApiKey);
 
   return (
     <main className="admin-content-page">

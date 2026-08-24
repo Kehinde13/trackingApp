@@ -4,6 +4,8 @@ import { consumePublicRateLimit, resolveRateLimitIdentity } from "@/lib/public-r
 import { getPublicShipment } from "@/lib/public-shipments";
 import { isValidPublicTrackingToken } from "@/lib/public-tracking";
 
+export const runtime = "nodejs";
+
 const SECURITY_HEADERS = { "Cache-Control": "private, no-store", "Referrer-Policy": "no-referrer", "X-Robots-Tag": "noindex, nofollow" };
 const notFoundResponse = () => NextResponse.json({ error: "Package not found." }, { status: 404, headers: SECURITY_HEADERS });
 

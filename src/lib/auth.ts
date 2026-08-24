@@ -5,16 +5,15 @@ import { prismaAdapter } from "better-auth/adapters/prisma";
 import { nextCookies } from "better-auth/next-js";
 import { admin } from "better-auth/plugins";
 
+import { getServerEnvironment } from "@/lib/env";
 import { prisma } from "@/lib/prisma";
 
-const trustedOrigins = (process.env.BETTER_AUTH_TRUSTED_ORIGINS ?? "")
-  .split(",")
-  .map((origin) => origin.trim())
-  .filter(Boolean);
+const environment = getServerEnvironment();
 
 export const auth = betterAuth({
   appName: "ParcelTrack Admin",
-  baseURL: process.env.BETTER_AUTH_URL,
+  baseURL: environment.canonicalOrigin,
+  secret: environment.authSecret,
   database: prismaAdapter(prisma, {
     provider: "postgresql",
   }),
@@ -40,9 +39,9 @@ export const auth = betterAuth({
       },
     },
   },
-  trustedOrigins,
+  trustedOrigins: environment.trustedOrigins,
   advanced: {
-    useSecureCookies: process.env.NODE_ENV === "production",
+    useSecureCookies: environment.isProduction,
     database: {
       joins: false,
     },

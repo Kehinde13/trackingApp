@@ -182,10 +182,19 @@ Do not implement the following until a later prompt requests them:
 
 The initial production target is Vercel with no proxy in front. Public client identity uses Vercel's official request helper. Adding a CDN, load balancer, or reverse proxy requires revisiting and testing client-IP resolution before deployment.
 
+Production uses a fixed canonical HTTPS `BETTER_AUTH_URL` and explicit
+`BETTER_AUTH_TRUSTED_ORIGINS`; never add a wildcard for Vercel preview hosts.
+Database-backed code uses the Node.js runtime and a bounded `pg` driver pool.
+Production migrations are a separate controlled `npm run db:deploy` release
+step, never part of application startup or every Vercel build. Follow
+`docs/deployment.md`; Preview must not receive Production data, credentials,
+provider access, webhook secrets, or administrator accounts.
+
 ## Database Commands
 
 - `npm run db:dev`: start the named local Prisma Postgres instance
 - `npm run db:migrate`: create and apply development migrations
+- `npm run db:deploy`: apply committed migrations in a controlled non-development release
 - `npm run db:seed`: seed the fake demonstration shipment idempotently
 - `npm run db:studio`: inspect the local database
 

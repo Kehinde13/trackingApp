@@ -25,6 +25,13 @@ or running the application. Press `q` in its terminal when finished.
 Useful checks are `npm run db:validate`, `npm run db:generate`, `npm test`,
 `npm run lint`, `npm run typecheck`, and `npm run build`.
 
+Production preparation and the controlled Vercel/PostgreSQL release sequence
+are documented in [`docs/deployment.md`](docs/deployment.md). Run
+`npm run deployment:check` against an intended production configuration before
+release; it performs offline validation and never connects to the database or a
+provider. Production migrations use the separate `npm run db:deploy` command
+and the demo seed is never run in production.
+
 ## Administrator authentication
 
 Generate a local secret with `npx auth@latest secret`, then add the value to
@@ -105,7 +112,7 @@ webhook configuration interface.
 The initial production target is direct Vercel with no proxy in front. Public
 rate limiting resolves client addresses with the official `@vercel/functions`
 helper and immediately stores only a domain-separated HMAC made with
-`BETTER_AUTH_SECRET`. Local development uses one shared identity. Vercel
+the independent `PUBLIC_TRACKING_HMAC_SECRET`. Local development uses one shared identity. Vercel
 requests without an IP use a shared five-request fail-safe bucket; production
 outside Vercel fails closed.
 

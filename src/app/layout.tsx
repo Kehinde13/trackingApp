@@ -2,6 +2,8 @@ import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import "./globals.css";
 
+export const runtime = "nodejs";
+
 export const metadata: Metadata = {
   title: "ParcelTrack | Follow your delivery",
   description:
@@ -22,4 +24,3 @@ export default function RootLayout({ children }: Readonly<{ children: ReactNode 
     </html>
   );
 }
-

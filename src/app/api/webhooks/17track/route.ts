@@ -3,6 +3,7 @@ import { after } from "next/server";
 import { cleanupExpiredWebhookReceipts, process17TrackWebhook } from "@/lib/seventeen-track-webhook";
 import { parse17TrackWebhook } from "@/lib/seventeen-track-webhook-schema";
 import { WebhookBodyError, readBoundedRawBody, verifyWebhookSignature } from "@/lib/webhook-security";
+import { getServerEnvironment } from "@/lib/env";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -20,7 +21,7 @@ export async function POST(request: Request) {
       : json(400, false);
   }
 
-  const secret = process.env.TRACKING_WEBHOOK_SECRET ?? "";
+  const secret = getServerEnvironment().trackingWebhookSecret ?? "";
   if (!verifyWebhookSignature(rawBody, request.headers.get("sign"), secret)) {
     return json(401, false);
   }

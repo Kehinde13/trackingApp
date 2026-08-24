@@ -2,6 +2,7 @@ import "server-only";
 
 import { createHmac } from "node:crypto";
 import { ipAddress } from "@vercel/functions";
+import { getServerEnvironment } from "@/lib/env";
 import { prisma } from "@/lib/prisma";
 
 export const RATE_LIMIT_WINDOW_MS = 5 * 60 * 1000;
@@ -26,7 +27,7 @@ export type RateLimitResult = { allowed: boolean; retryAfter: number };
 
 export async function consumePublicRateLimit(identity: RateLimitIdentity, now = new Date()): Promise<RateLimitResult | null> {
   if ("unavailable" in identity) return null;
-  const secret = process.env.BETTER_AUTH_SECRET;
+  const secret = getServerEnvironment().publicTrackingHmacSecret;
   if (!secret) return null;
   const identityHash = hashRateLimitIdentity(identity.identity, secret);
   const expiresAt = new Date(now.getTime() + RATE_LIMIT_WINDOW_MS);
