@@ -793,7 +793,13 @@ select:focus-visible {
 .public-summary dt { color: #6b7785; font-size: .82rem; }
 .public-summary dd { margin: 5px 0 0; font-weight: 700; }
 .public-timeline ol { list-style: none; padding: 8px 0 0; }
-.public-timeline li { display: grid; grid-template-columns: 18px 1fr; gap: 12px; padding: 16px 0; border-bottom: 1px solid #edf1ef; }
+.public-timeline li { position: relative; display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 12px; padding: 16px 0; border-bottom: 1px solid #edf1ef; }
+.public-timeline li::before { content: ""; position: absolute; left: 8px; top: 30px; bottom: -4px; width: 2px; background: #dbe5f0; }
+.public-timeline li:last-child::before { display: none; }
+.public-timeline .timeline-dot { position: static; justify-self: center; margin-top: 3px; }
+.public-timeline-event { min-width: 0; overflow-wrap: anywhere; }
+.public-timeline-event p { margin: 7px 0; color: var(--slate-700); font-size: 12px; }
+.public-timeline-event time { color: var(--slate-500); font-size: 11px; }
 .public-track-footer { width: min(920px, calc(100% - 32px)); margin: 30px auto 0; color: #64748b; text-align: center; }
 .public-track-state { min-height: 70vh; display: grid; place-content: center; gap: 12px; padding: 24px; text-align: center; }
 @media (max-width: 600px) { .public-track-header span { display: none; } .public-summary dl { grid-template-columns: 1fr; } }

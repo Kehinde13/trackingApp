@@ -5,6 +5,9 @@ import { ShipmentStatus } from "@/generated/prisma/enums";
 const CONTROL_CHARACTERS = /[\u0000-\u001F\u007F]/;
 export const MAX_EVENT_AGE_MS = 10 * 365 * 24 * 60 * 60 * 1000;
 export const MAX_EVENT_FUTURE_MS = 10 * 60 * 1000;
+// Internal manual-event form contract: browser-local wall time is converted to
+// this canonical UTC representation before the authenticated server action runs.
+const UTC_ISO_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 
 const optionalText = (label: string, max: number) =>
   z
@@ -15,6 +18,11 @@ const optionalText = (label: string, max: number) =>
     .transform((value) => (value === "" ? null : value));
 
 const occurredAt = z.string().trim().transform((value, context) => {
+  if (!UTC_ISO_PATTERN.test(value)) {
+    context.addIssue({ code: "custom", message: "Enter a valid event date and time." });
+    return z.NEVER;
+  }
+
   const date = new Date(value);
   if (!value || Number.isNaN(date.getTime())) {
     context.addIssue({ code: "custom", message: "Enter a valid event date and time." });

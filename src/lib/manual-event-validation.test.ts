@@ -40,6 +40,18 @@ describe("manualEventSchema", () => {
     expect(manualEventSchema.safeParse({ ...valid, occurredAt: "2026-08-23T12:11:00.000Z" }).success).toBe(false);
   });
 
+  it("accepts the internal canonical UTC form contract", () => {
+    expect(manualEventSchema.safeParse({ ...valid, occurredAt: "2026-08-23T11:30:00.000Z" }).success).toBe(true);
+  });
+
+  it("rejects offset-free datetime-local values from clients", () => {
+    expect(manualEventSchema.safeParse({ ...valid, occurredAt: "2026-08-23T11:30" }).success).toBe(false);
+  });
+
+  it("rejects numeric offsets as noncanonical internal form input", () => {
+    expect(manualEventSchema.safeParse({ ...valid, occurredAt: "2026-08-23T11:30:00+01:00" }).success).toBe(false);
+  });
+
   it("accepts reasonable history and rejects dates over ten years old", () => {
     expect(manualEventSchema.safeParse({ ...valid, occurredAt: "2021-01-01T00:00:00.000Z" }).success).toBe(true);
     expect(manualEventSchema.safeParse({ ...valid, occurredAt: "2015-01-01T00:00:00.000Z" }).success).toBe(false);

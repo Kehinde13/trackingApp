@@ -3,6 +3,7 @@
 import { useActionState, useEffect, useRef } from "react";
 
 import type { ManualUpdateState } from "./manual-update-state";
+import { formatDateForDatetimeLocal, localDateTimeToUtcIso } from "@/lib/local-date-time";
 import { SHIPMENT_STATUS_OPTIONS, getStatusPresentation } from "@/lib/shipment-domain";
 
 type Props = {
@@ -10,26 +11,27 @@ type Props = {
   initialState: ManualUpdateState;
 };
 
-function localDateTimeValue(date: Date): string {
-  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
-  return local.toISOString().slice(0, 16);
-}
-
 export function ManualUpdateForm({ action, initialState }: Props) {
   const [state, formAction, pending] = useActionState(action, initialState);
   const occurredAtRef = useRef<HTMLInputElement>(null);
+  const occurredAtUtcRef = useRef<HTMLInputElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
   const error = (name: keyof ManualUpdateState["values"]) => state.fieldErrors[name]?.[0];
 
   useEffect(() => {
     if (state.success) formRef.current?.reset();
     if (occurredAtRef.current && !occurredAtRef.current.value) {
-      occurredAtRef.current.value = localDateTimeValue(new Date());
+      occurredAtRef.current.value = formatDateForDatetimeLocal(new Date());
     }
   }, [state.success]);
 
+  function serializeEventTime() {
+    const utcValue = localDateTimeToUtcIso(occurredAtRef.current?.value ?? "");
+    if (occurredAtUtcRef.current) occurredAtUtcRef.current.value = utcValue ?? "";
+  }
+
   return (
-    <form ref={formRef} className="manual-update-form" action={formAction} noValidate>
+    <form ref={formRef} className="manual-update-form" action={formAction} onSubmit={serializeEventTime} noValidate>
       <div className="panel-heading"><div><h2>Add manual update</h2><p>This shipping-team update will be visible to the customer when public tracking launches.</p></div></div>
       {state.message ? <p className={state.success ? "form-success" : "form-message"} role="status">{state.message}</p> : null}
       <div className="package-form-grid">
@@ -42,7 +44,8 @@ export function ManualUpdateForm({ action, initialState }: Props) {
         </div>
         <div className="package-field">
           <label htmlFor="manual-occurred-at">Event date and time</label>
-          <input ref={occurredAtRef} id="manual-occurred-at" name="occurredAt" type="datetime-local" defaultValue={state.values.occurredAt} aria-invalid={error("occurredAt") ? true : undefined} aria-describedby={error("occurredAt") ? "manual-occurred-at-error" : undefined} />
+          <input ref={occurredAtRef} id="manual-occurred-at" name="occurredAtLocal" type="datetime-local" aria-invalid={error("occurredAt") ? true : undefined} aria-describedby={error("occurredAt") ? "manual-occurred-at-error" : undefined} />
+          <input ref={occurredAtUtcRef} name="occurredAt" type="hidden" />
           {error("occurredAt") ? <p id="manual-occurred-at-error" className="field-error">{error("occurredAt")}</p> : null}
         </div>
         <div className="package-field package-field-wide">
