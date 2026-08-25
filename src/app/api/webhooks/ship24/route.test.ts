@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { processShip24Webhook, cleanupExpiredWebhookReceipts } = vi.hoisted(() => ({ processShip24Webhook: vi.fn(), cleanupExpiredWebhookReceipts: vi.fn() }));
+const { processShip24Webhook, cleanupExpiredWebhookReceipts, getServerEnvironment } = vi.hoisted(() => ({ processShip24Webhook: vi.fn(), cleanupExpiredWebhookReceipts: vi.fn(), getServerEnvironment: vi.fn() }));
 vi.mock("@/lib/ship24-webhook", () => ({ processShip24Webhook, cleanupExpiredWebhookReceipts }));
+vi.mock("@/lib/env", () => ({ getServerEnvironment }));
 vi.mock("next/server", () => ({ after: vi.fn() }));
 
 const secret = "invented-independent-webhook-secret";
@@ -9,7 +10,19 @@ const valid = JSON.stringify({ trackings: [{ tracker: { trackerId: "trk_1", trac
 const request = (body: string, authorization = `Bearer ${secret}`) => new Request("http://local.test/api/webhooks/ship24", { method: "POST", headers: { authorization }, body });
 
 describe("POST /api/webhooks/ship24", () => {
-  beforeEach(() => { vi.clearAllMocks(); process.env.SHIP24_WEBHOOK_SECRET = secret; processShip24Webhook.mockResolvedValue({ duplicate: false }); });
+  beforeEach(() => { vi.clearAllMocks(); getServerEnvironment.mockReturnValue({ ship24WebhookSecret: secret }); processShip24Webhook.mockResolvedValue({ duplicate: false }); });
+
+  it("supports unauthenticated, side-effect-free HEAD readiness checks while GET remains unsupported", async () => {
+    const route = await import("./route");
+    const response = route.HEAD();
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe("");
+    expect(response.headers.get("cache-control")).toBe("private, no-store");
+    expect(getServerEnvironment).not.toHaveBeenCalled();
+    expect(processShip24Webhook).not.toHaveBeenCalled();
+    expect(cleanupExpiredWebhookReceipts).not.toHaveBeenCalled();
+    expect("GET" in route).toBe(false);
+  });
   it("authenticates before parsing and rejects invalid bearer credentials", async () => {
     const { POST } = await import("./route");
     expect((await POST(request("not json", "Bearer wrong"))).status).toBe(401);

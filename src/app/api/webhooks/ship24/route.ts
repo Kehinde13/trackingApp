@@ -11,6 +11,10 @@ export const dynamic = "force-dynamic";
 const headers = { "Cache-Control": "no-store", "Content-Type": "application/json" };
 const json = (status: number, ok: boolean) => new Response(JSON.stringify({ ok }), { status, headers });
 
+export function HEAD() {
+  return new Response(null, { status: 200, headers: { "Cache-Control": "private, no-store" } });
+}
+
 export async function POST(request: Request) {
   const secret = getServerEnvironment().ship24WebhookSecret ?? "";
   if (!verifyBearerSecret(request.headers.get("authorization"), secret)) return json(401, false);
