@@ -2,8 +2,9 @@
 
 ParcelTrack's initial production boundary is Next.js on Vercel with managed
 PostgreSQL and no proxy in front. Preview and Production are separate Vercel
-environments. Complete each controlled phase in order; application startup and
-Vercel builds must never run migrations or the demo seed.
+environments. Complete each controlled phase in order. The build orchestrator
+runs committed migrations immediately before a genuine Vercel Production
+build; application startup and the demo seed never run migrations.
 
 ## Environment manifest
 
@@ -67,18 +68,18 @@ Changing an environment variable requires a new deployment.
 
 ## Phase 3 — Database release
 
-1. Pull production variables only into a temporary ignored local environment
-   when a controlled local release is necessary. Prefer a protected CI release
-   step where available.
-2. Run `prisma migrate status` and review the result.
-3. Run `npm run db:deploy` once from the controlled release context.
-4. Run `prisma migrate status` again.
-5. Do not run `npm run db:migrate`, `prisma migrate dev`, or the demo seed in
-   production.
+`npm run build` uses `scripts/build.mjs`. Only when both `VERCEL=1` and
+`VERCEL_ENV=production` are present does it run `npm run db:deploy` before
+`next build`. Preview, Vercel development, and local builds skip database
+migrations. An unknown Vercel environment fails closed.
 
-`db:deploy` runs `prisma migrate deploy`. It is deliberately separate from
-installation, build, and application startup so concurrent Vercel builds do not
-race migrations. Prisma Client generation remains in `postinstall`.
+`db:deploy` runs the idempotent `prisma migrate deploy`; a migration failure
+prevents `next build` and therefore prevents deployment promotion. Prisma
+Client generation remains in `postinstall`. Never run `db:migrate`, `migrate
+dev`, `db push`, reset, or the demo seed in Production. Schema migrations must
+remain backward-compatible with the currently deployed application whenever
+possible because the previous deployment continues serving traffic during the
+build.
 
 ## Phase 4 — Application deployment
 

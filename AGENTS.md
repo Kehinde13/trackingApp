@@ -190,10 +190,14 @@ The initial production target is Vercel with no proxy in front. Public client id
 Production uses a fixed canonical HTTPS `BETTER_AUTH_URL` and explicit
 `BETTER_AUTH_TRUSTED_ORIGINS`; never add a wildcard for Vercel preview hosts.
 Database-backed code uses the Node.js runtime and a bounded `pg` driver pool.
-Production migrations are a separate controlled `npm run db:deploy` release
-step, never part of application startup or every Vercel build. Follow
-`docs/deployment.md`; Preview must not receive Production data, credentials,
-provider access, webhook secrets, or administrator accounts.
+Committed Production migrations run through `npm run db:deploy` immediately
+before `next build` only when `VERCEL=1` and `VERCEL_ENV=production`. The
+operation is idempotent, and failure must prevent the application build and
+deployment promotion. Preview and local builds never run this migration step
+or access Production. Migrations should remain backward-compatible with the
+currently deployed version whenever possible. Follow `docs/deployment.md`;
+Preview must not receive Production data, credentials, provider access,
+webhook secrets, or administrator accounts.
 
 ## Database Commands
 
