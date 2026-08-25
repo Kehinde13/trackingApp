@@ -18,8 +18,8 @@ describe("public shipment DTO", () => {
     const dto = await getPublicShipment("AbCdEf0123456789_-AbCdEf01234567");
     expect(Object.keys(dto ?? {}).sort()).toEqual(["carrierName", "deliveredAt", "destinationCity", "destinationCountryCode", "estimatedDeliveryAt", "events", "lastUpdateAt", "maskedTrackingNumber", "originCity", "originCountryCode", "reference", "status"].sort());
     expect(JSON.stringify(dto)).not.toMatch(/recipient|createdBy|rawPayload|providerEventId|private-id|private-token|Private admin/);
-    expect(dto?.events[0]).toEqual({ status: ShipmentStatus.IN_TRANSIT, description: "Moving", location: null, city: "Lagos", countryCode: "NG", occurredAt: "2026-08-23T09:00:00.000Z", sourceLabel: "Shipping team update" });
-    expect(findUnique.mock.calls[0][0].select.trackingEvents.orderBy).toEqual([{ occurredAt: "asc" }, { createdAt: "asc" }, { id: "asc" }]);
+    expect(dto?.events[0]).toEqual({ status: ShipmentStatus.IN_TRANSIT, description: "Moving", location: null, city: "Lagos", countryCode: "NG", occurredAt: "2026-08-23T09:00:00.000Z", providerOccurredAt: undefined, sourceLabel: "Shipping team update" });
+    expect(findUnique.mock.calls[0][0].select.trackingEvents.orderBy).toEqual([{ occurredAt: { sort: "asc", nulls: "last" } }, { providerEventOrder: "asc" }, { createdAt: "asc" }, { id: "asc" }]);
     expect(findUnique.mock.calls[0][0].select).not.toHaveProperty("recipientName");
   });
 });

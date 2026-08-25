@@ -51,6 +51,7 @@ model Shipment {
   carrierName                 String?
   trackingNumber              String?
   trackingProvider            String?
+  providerTrackerId           String?
   providerCarrierCode         String?
   carrierConnectionStatus     CarrierConnectionStatus @default(UNLINKED)
   carrierRegisteredAt         DateTime?
@@ -69,6 +70,7 @@ model Shipment {
   trackingEvents              TrackingEvent[]
 
   @@unique([carrierCode, trackingNumber])
+  @@unique([trackingProvider, providerTrackerId])
   @@index([publicToken])
   @@index([reference])
   @@index([status])
@@ -78,24 +80,28 @@ model Shipment {
 }
 
 model TrackingEvent {
-  id              String              @id @default(uuid())
-  shipmentId      String
-  source          TrackingEventSource
-  status          ShipmentStatus
-  description     String
-  location        String?
-  city            String?
-  countryCode     String?
-  occurredAt      DateTime
-  providerEventId String?
-  rawPayload      Json?
-  createdAt       DateTime            @default(now())
-  createdById     String?
-  shipment        Shipment            @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
-  createdBy       User?               @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  id                    String              @id @default(uuid())
+  shipmentId            String
+  source                TrackingEventSource
+  status                ShipmentStatus
+  description           String
+  location              String?
+  city                  String?
+  countryCode           String?
+  occurredAt            DateTime?
+  providerOccurredAt    String?
+  providerEventOrder    Int?
+  statusAffectsShipment Boolean             @default(true)
+  providerEventId       String?
+  rawPayload            Json?
+  createdAt             DateTime            @default(now())
+  createdById           String?
+  shipment              Shipment            @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  createdBy             User?               @relation(fields: [createdById], references: [id], onDelete: SetNull)
 
   @@unique([shipmentId, providerEventId])
   @@index([shipmentId, occurredAt])
+  @@index([shipmentId, providerEventOrder])
   @@index([source])
   @@index([status])
   @@index([providerEventId])

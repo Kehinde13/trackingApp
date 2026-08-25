@@ -177,6 +177,11 @@ Do not implement the following until a later prompt requests them:
 - Supported webhook events are `TRACKING_UPDATED` and `TRACKING_STOPPED`; unmatched and unsupported events are acknowledged without exposing shipment data.
 - Do not log webhook bodies, signatures, tracking numbers, locations, descriptions, public tokens, recipient data, or secrets.
 - Keep 17TRACK IP allowlisting disabled for initial direct-Vercel deployment unless stable outbound IPs are configured.
+- Ship24 uses independent server-only `SHIP24_API_KEY` and
+  `SHIP24_WEBHOOK_SECRET` values. Keep Production and Preview isolated, treat
+  free-plan quota as scarce, use one tracker per shipment, prefer webhooks to
+  polling, and never transmit recipient name, email, telephone, address, or
+  postcode. Live activation is a separate controlled step.
 
 ## Deployment Trust Boundary
 

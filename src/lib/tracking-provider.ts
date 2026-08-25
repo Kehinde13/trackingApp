@@ -5,15 +5,21 @@ import { createHash } from "node:crypto";
 import { z } from "zod";
 
 export const trackingRequestSchema = z.object({
-  trackingNumber: z.string().trim().regex(/^[A-Za-z0-9-]{5,50}$/),
-  carrierCode: z.string().trim().regex(/^\d{1,10}$/).optional(),
+  trackingNumber: z.string().trim().regex(/^[A-Za-z0-9_/.\-]{5,50}$/),
+  carrierCode: z.string().trim().regex(/^[A-Za-z0-9_-]{1,64}$/).optional(),
+  clientTrackerId: z.string().trim().min(1).max(100).optional(),
+  originCountryCode: z.string().trim().regex(/^[A-Z]{2,3}$/).optional(),
+  destinationCountryCode: z.string().trim().regex(/^[A-Z]{2,3}$/).optional(),
+  providerTrackerId: z.string().trim().min(1).max(100).optional(),
 });
 
 export type TrackingRequest = z.infer<typeof trackingRequestSchema>;
 
 export type NormalizedCarrierEvent = {
   stableId?: string;
-  occurredAt: Date;
+  occurredAt: Date | null;
+  providerOccurredAt?: string;
+  providerEventOrder?: number;
   providerStatus: string;
   providerSubStatus?: string;
   description: string;
@@ -30,7 +36,7 @@ export type TrackingInfo = {
 export interface TrackingProvider {
   readonly name: string;
   readonly enabled: boolean;
-  registerTracking(input: TrackingRequest): Promise<{ carrierCode?: string }>;
+  registerTracking(input: TrackingRequest): Promise<{ carrierCode?: string; providerTrackerId?: string }>;
   getTrackingInfo(input: TrackingRequest): Promise<TrackingInfo>;
 }
 
@@ -71,7 +77,8 @@ export function carrierEventId(
   const canonical = [
     provider,
     trackingNumber,
-    event.occurredAt.toISOString(),
+    event.occurredAt?.toISOString() ?? event.providerOccurredAt ?? "unknown-time",
+    event.providerEventOrder?.toString() ?? "",
     normalized(event.providerSubStatus ?? event.providerStatus),
     normalized(event.location),
     normalized(event.description),

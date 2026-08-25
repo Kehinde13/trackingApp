@@ -12,7 +12,7 @@ export class FakeTrackingProvider implements TrackingProvider {
   readonly enabled = true;
   readonly registrations: TrackingRequest[] = [];
 
-  constructor(private info: TrackingInfo = { carrierCode: "9999", events: [] }) {}
+  constructor(private info: TrackingInfo = { carrierCode: "9999", events: [] }, private providerTrackerId?: string) {}
 
   setEvents(events: NormalizedCarrierEvent[]) {
     this.info = { ...this.info, events };
@@ -20,7 +20,7 @@ export class FakeTrackingProvider implements TrackingProvider {
 
   async registerTracking(input: TrackingRequest) {
     this.registrations.push(input);
-    return { carrierCode: input.carrierCode ?? this.info.carrierCode };
+    return { carrierCode: input.carrierCode ?? this.info.carrierCode, providerTrackerId: this.providerTrackerId };
   }
 
   async getTrackingInfo(input: TrackingRequest) {

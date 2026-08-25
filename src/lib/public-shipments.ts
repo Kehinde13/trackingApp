@@ -4,7 +4,7 @@ import type { ShipmentStatus } from "@/generated/prisma/enums";
 import { prisma } from "@/lib/prisma";
 import { isValidPublicTrackingToken, maskPublicTrackingNumber, PUBLIC_SOURCE_LABELS } from "@/lib/public-tracking";
 
-export type PublicTrackingEventDto = { status: ShipmentStatus; description: string; location: string | null; city: string | null; countryCode: string | null; occurredAt: string; sourceLabel: string };
+export type PublicTrackingEventDto = { status: ShipmentStatus; description: string; location: string | null; city: string | null; countryCode: string | null; occurredAt: string | null; providerOccurredAt: string | null; sourceLabel: string };
 export type PublicShipmentDto = { reference: string; status: ShipmentStatus; carrierName: string | null; maskedTrackingNumber: string | null; originCity: string | null; originCountryCode: string | null; destinationCity: string | null; destinationCountryCode: string | null; estimatedDeliveryAt: string | null; deliveredAt: string | null; lastUpdateAt: string; events: PublicTrackingEventDto[] };
 
 export async function getPublicShipment(token: string): Promise<PublicShipmentDto | null> {
@@ -16,8 +16,8 @@ export async function getPublicShipment(token: string): Promise<PublicShipmentDt
       originCity: true, originCountryCode: true, destinationCity: true, destinationCountryCode: true,
       estimatedDeliveryAt: true, deliveredAt: true, updatedAt: true,
       trackingEvents: {
-        orderBy: [{ occurredAt: "asc" }, { createdAt: "asc" }, { id: "asc" }],
-        select: { id: true, status: true, description: true, location: true, city: true, countryCode: true, occurredAt: true, createdAt: true, source: true },
+        orderBy: [{ occurredAt: { sort: "asc", nulls: "last" } }, { providerEventOrder: "asc" }, { createdAt: "asc" }, { id: "asc" }],
+        select: { id: true, status: true, description: true, location: true, city: true, countryCode: true, occurredAt: true, providerOccurredAt: true, providerEventOrder: true, createdAt: true, source: true },
       },
     },
   });
@@ -34,6 +34,6 @@ export async function getPublicShipment(token: string): Promise<PublicShipmentDt
     estimatedDeliveryAt: shipment.estimatedDeliveryAt?.toISOString() ?? null,
     deliveredAt: shipment.deliveredAt?.toISOString() ?? null,
     lastUpdateAt: shipment.updatedAt.toISOString(),
-    events: shipment.trackingEvents.map((event) => ({ status: event.status, description: event.description, location: event.location, city: event.city, countryCode: event.countryCode, occurredAt: event.occurredAt.toISOString(), sourceLabel: PUBLIC_SOURCE_LABELS[event.source] })),
+    events: shipment.trackingEvents.map((event) => ({ status: event.status, description: event.description, location: event.location, city: event.city, countryCode: event.countryCode, occurredAt: event.occurredAt?.toISOString() ?? null, providerOccurredAt: event.providerOccurredAt, sourceLabel: PUBLIC_SOURCE_LABELS[event.source] })),
   };
 }

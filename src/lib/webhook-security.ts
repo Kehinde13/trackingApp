@@ -57,6 +57,23 @@ export function verifyWebhookSignature(
   return compare(supplied, expected);
 }
 
-export function webhookPayloadHash(rawBody: string): string {
-  return createHash("sha256").update("parceltrack:17track:webhook:v1\0").update(rawBody, "utf8").digest("hex");
+export function verifyBearerSecret(
+  authorization: string | null,
+  secret: string,
+  compare: typeof timingSafeEqual = timingSafeEqual,
+): boolean {
+  if (!secret || !authorization?.startsWith("Bearer ")) return false;
+  const supplied = Buffer.from(authorization.slice(7), "utf8");
+  const expected = Buffer.from(secret, "utf8");
+  if (supplied.length !== expected.length) {
+    const padded = Buffer.alloc(expected.length);
+    supplied.copy(padded, 0, 0, expected.length);
+    compare(padded, expected);
+    return false;
+  }
+  return compare(supplied, expected);
+}
+
+export function webhookPayloadHash(rawBody: string, provider = "17track"): string {
+  return createHash("sha256").update(`parceltrack:${provider}:webhook:v1\0`).update(rawBody, "utf8").digest("hex");
 }

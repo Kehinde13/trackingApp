@@ -45,7 +45,7 @@ export async function addManualTrackingEvent(
           if (!shipment) throw new ShipmentNotFoundError();
 
           const newestEvent = await transaction.trackingEvent.findFirst({
-            where: { shipmentId },
+            where: { shipmentId, occurredAt: { not: null }, statusAffectsShipment: true },
             orderBy: [{ occurredAt: "desc" }, { createdAt: "desc" }, { id: "desc" }],
             select: { occurredAt: true },
           });

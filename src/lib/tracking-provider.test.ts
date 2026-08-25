@@ -21,6 +21,8 @@ describe("tracking provider foundation", () => {
     expect(createTrackingProvider({ provider: "17track", apiKey: "" })).toBeInstanceOf(DisabledTrackingProvider);
     expect(createTrackingProvider({ provider: "unexpected", apiKey: "secret" })).toBeInstanceOf(DisabledTrackingProvider);
     expect(createTrackingProvider({ provider: "17track", apiKey: "secret" }).name).toBe("17track");
+    expect(createTrackingProvider({ provider: "ship24", ship24ApiKey: "" })).toBeInstanceOf(DisabledTrackingProvider);
+    expect(createTrackingProvider({ provider: "ship24", ship24ApiKey: "invented" }).name).toBe("ship24");
   });
 
   it("rejects disabled operations with a safe code", async () => {

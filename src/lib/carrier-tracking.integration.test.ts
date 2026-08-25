@@ -14,7 +14,8 @@ describe.runIf(Boolean(process.env.DATABASE_URL))("carrier tracking database int
   const publicToken = generatePublicTrackingToken();
   let shipmentId = "";
   const adminDescription = "Administrator confirmed parcel handoff";
-  const provider = new FakeTrackingProvider({ carrierCode: "3011", events: [] });
+  const providerTrackerId = `test-tracker-${randomUUID()}`;
+  const provider = new FakeTrackingProvider({ carrierCode: "3011", events: [] }, providerTrackerId);
 
   beforeAll(async () => {
     const shipment = await prisma.shipment.create({
@@ -33,6 +34,9 @@ describe.runIf(Boolean(process.env.DATABASE_URL))("carrier tracking database int
 
   it("registers, synchronizes concurrently, deduplicates, and preserves chronology/privacy", async () => {
     await registerShipmentTracking(shipmentId, undefined, provider);
+    await registerShipmentTracking(shipmentId, undefined, provider);
+    expect((await prisma.shipment.findUniqueOrThrow({ where: { id: shipmentId } })).providerTrackerId).toBe(providerTrackerId);
+    expect(provider.registrations).toHaveLength(1);
     provider.setEvents([
       { occurredAt: new Date("2026-08-19T10:00:00Z"), providerStatus: "InfoReceived", description: "Carrier received information" },
       { occurredAt: new Date("2026-08-21T10:00:00Z"), providerStatus: "Delivered", description: "Delivered to recipient" },

@@ -33,3 +33,39 @@ export function map17TrackStatus(status: string, subStatus?: string): ShipmentSt
   if (subStatus && SUB_STATUS_MAP[subStatus]) return SUB_STATUS_MAP[subStatus];
   return MAIN_STATUS_MAP[status] ?? null;
 }
+
+const SHIP24_MILESTONE_MAP: Readonly<Record<string, ShipmentStatus>> = {
+  pending: ShipmentStatus.PENDING,
+  info_received: ShipmentStatus.INFO_RECEIVED,
+  in_transit: ShipmentStatus.IN_TRANSIT,
+  out_for_delivery: ShipmentStatus.OUT_FOR_DELIVERY,
+  failed_attempt: ShipmentStatus.EXCEPTION,
+  available_for_pickup: ShipmentStatus.IN_TRANSIT,
+  delivered: ShipmentStatus.DELIVERED,
+  exception: ShipmentStatus.EXCEPTION,
+};
+
+const SHIP24_CODE_MAP: Readonly<Record<string, ShipmentStatus>> = {
+  transit_handover: ShipmentStatus.PICKED_UP,
+  customs_received: ShipmentStatus.CUSTOMS,
+  customs_exception: ShipmentStatus.CUSTOMS,
+  customs_rejected: ShipmentStatus.EXCEPTION,
+  customs_cleared: ShipmentStatus.IN_TRANSIT,
+  delivery_out_for_delivery: ShipmentStatus.OUT_FOR_DELIVERY,
+  delivery_attempted: ShipmentStatus.EXCEPTION,
+  delivery_available_for_pickup: ShipmentStatus.IN_TRANSIT,
+  delivery_delivered: ShipmentStatus.DELIVERED,
+  exception_return: ShipmentStatus.RETURNED,
+  data_order_cancelled: ShipmentStatus.CANCELLED,
+};
+
+export function mapShip24Status(milestone: string, statusCode?: string): ShipmentStatus | null {
+  if (statusCode && SHIP24_CODE_MAP[statusCode]) return SHIP24_CODE_MAP[statusCode];
+  return SHIP24_MILESTONE_MAP[milestone] ?? null;
+}
+
+export function mapCarrierStatus(provider: string, status: string, subStatus?: string): ShipmentStatus | null {
+  return provider === "ship24"
+    ? mapShip24Status(status, subStatus)
+    : map17TrackStatus(status, subStatus);
+}

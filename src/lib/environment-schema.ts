@@ -11,6 +11,8 @@ export const ENVIRONMENT_VARIABLES = {
     "TRACKING_PROVIDER",
     "TRACKING_PROVIDER_API_KEY",
     "TRACKING_WEBHOOK_SECRET",
+    "SHIP24_API_KEY",
+    "SHIP24_WEBHOOK_SECRET",
   ],
   developmentOnly: ["SHADOW_DATABASE_URL", "RUN_DB_TESTS"],
   vercelProvided: ["VERCEL", "VERCEL_ENV", "VERCEL_URL", "VERCEL_PROJECT_PRODUCTION_URL"],
@@ -18,7 +20,7 @@ export const ENVIRONMENT_VARIABLES = {
 } as const;
 
 export type EnvironmentSource = Record<string, string | undefined>;
-export type TrackingProviderName = "disabled" | "17track";
+export type TrackingProviderName = "disabled" | "17track" | "ship24";
 
 export type ServerEnvironment = {
   isProduction: boolean;
@@ -31,6 +33,8 @@ export type ServerEnvironment = {
   trackingProvider: TrackingProviderName;
   trackingProviderApiKey?: string;
   trackingWebhookSecret?: string;
+  ship24ApiKey?: string;
+  ship24WebhookSecret?: string;
   isVercel: boolean;
   vercelEnvironment?: string;
 };
@@ -71,11 +75,12 @@ export function validateProductionEnvironment(source: EnvironmentSource): string
   }
   if ((source.PUBLIC_TRACKING_HMAC_SECRET?.length ?? 0) < 32) errors.push("PUBLIC_TRACKING_HMAC_SECRET");
   if (parseDatabasePoolMax(source.DATABASE_POOL_MAX) === null) errors.push("DATABASE_POOL_MAX");
-  if (source.TRACKING_PROVIDER !== undefined && !["disabled", "17track"].includes(source.TRACKING_PROVIDER)) errors.push("TRACKING_PROVIDER");
+  if (source.TRACKING_PROVIDER !== undefined && !["disabled", "17track", "ship24"].includes(source.TRACKING_PROVIDER)) errors.push("TRACKING_PROVIDER");
   if (source.TRACKING_PROVIDER === "17track") {
     if (!source.TRACKING_PROVIDER_API_KEY) errors.push("TRACKING_PROVIDER_API_KEY");
     if ((source.TRACKING_WEBHOOK_SECRET?.length ?? 0) < 32) errors.push("TRACKING_WEBHOOK_SECRET");
   }
+  if (source.TRACKING_PROVIDER === "ship24" && !source.SHIP24_API_KEY) errors.push("SHIP24_API_KEY");
   return [...new Set(errors)].sort();
 }
 
@@ -96,9 +101,13 @@ export function readServerEnvironment(source: EnvironmentSource): ServerEnvironm
     canonicalOrigin,
     trustedOrigins,
     publicTrackingHmacSecret: source.PUBLIC_TRACKING_HMAC_SECRET,
-    trackingProvider: source.TRACKING_PROVIDER === "17track" ? "17track" : "disabled",
+    trackingProvider: source.TRACKING_PROVIDER === "17track" || source.TRACKING_PROVIDER === "ship24"
+      ? source.TRACKING_PROVIDER
+      : "disabled",
     trackingProviderApiKey: source.TRACKING_PROVIDER_API_KEY,
     trackingWebhookSecret: source.TRACKING_WEBHOOK_SECRET,
+    ship24ApiKey: source.SHIP24_API_KEY,
+    ship24WebhookSecret: source.SHIP24_WEBHOOK_SECRET,
     isVercel: source.VERCEL === "1",
     vercelEnvironment: source.VERCEL_ENV,
   };

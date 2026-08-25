@@ -58,6 +58,14 @@ Local development defaults to `TRACKING_PROVIDER="disabled"`. To enable
 `TRACKING_PROVIDER_API_KEY` to the secret API key in the local or deployment
 environment. Never put a real value in `.env.example` or a tracked file.
 
+Ship24 is available through the same provider-neutral boundary. Set
+`TRACKING_PROVIDER="ship24"` and provide the server-only `SHIP24_API_KEY`.
+Webhook activation is a separate step using an independent
+`SHIP24_WEBHOOK_SECRET` at `POST /api/webhooks/ship24`. No recipient name,
+email, telephone, address, or postcode is transmitted to Ship24. Treat its
+free-plan quota as scarce: one tracker generally represents one shipment, and
+authenticated webhooks are preferred to polling.
+
 From a protected package-detail page, an administrator registers an eligible
 tracking number (optionally supplying the numeric 17TRACK carrier code), then
 uses **Sync now** to import immutable carrier events. Synchronization is

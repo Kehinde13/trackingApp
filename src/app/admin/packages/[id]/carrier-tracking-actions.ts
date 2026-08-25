@@ -9,7 +9,7 @@ import { CarrierTrackingOperationError, registerShipmentTracking, syncShipmentTr
 
 export type CarrierActionState = { success: boolean; message: string };
 const idSchema = z.uuid();
-const carrierCodeSchema = z.union([z.literal(""), z.string().trim().regex(/^\d{1,10}$/)]);
+const carrierCodeSchema = z.union([z.literal(""), z.string().trim().regex(/^[A-Za-z0-9_-]{1,64}$/)]);
 
 async function authorize() {
   try { await requireAdminForMutation(); return true; }

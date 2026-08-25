@@ -33,6 +33,11 @@ describe("production environment validation", () => {
     expect(validateProductionEnvironment({ ...valid, TRACKING_PROVIDER: "17track" })).toEqual(expect.arrayContaining(["TRACKING_PROVIDER_API_KEY", "TRACKING_WEBHOOK_SECRET"]));
   });
 
+  it("requires only the Ship24 API key when Ship24 is selected", () => {
+    expect(validateProductionEnvironment({ ...valid, TRACKING_PROVIDER: "ship24" })).toContain("SHIP24_API_KEY");
+    expect(validateProductionEnvironment({ ...valid, TRACKING_PROVIDER: "ship24", SHIP24_API_KEY: "invented" })).toEqual([]);
+  });
+
   it.each([[undefined, 2], ["1", 1], ["10", 10], ["0", null], ["11", null], ["2.5", null], ["no", null]])("parses bounded pool size %s", (value, expected) => {
     expect(parseDatabasePoolMax(value)).toBe(expected);
   });

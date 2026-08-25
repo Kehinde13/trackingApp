@@ -3,7 +3,7 @@ import "server-only";
 import { Prisma } from "@/generated/prisma/client";
 import { CarrierConnectionStatus, ShipmentStatus, TrackingEventSource } from "@/generated/prisma/enums";
 import { MAX_EVENT_AGE_MS, MAX_EVENT_FUTURE_MS } from "@/lib/manual-event-validation";
-import { map17TrackStatus } from "@/lib/carrier-status-mapping";
+import { mapCarrierStatus } from "@/lib/carrier-status-mapping";
 import { prisma } from "@/lib/prisma";
 import {
   TRACKING_ERROR_CODES,
@@ -43,7 +43,7 @@ export async function registerShipmentTracking(
   if (!provider.enabled) throw new CarrierTrackingOperationError(TRACKING_ERROR_CODES.DISABLED);
   const shipment = await prisma.shipment.findUnique({
     where: { id: shipmentId },
-    select: { trackingNumber: true, carrierConnectionStatus: true, trackingProvider: true, providerCarrierCode: true },
+    select: { id: true, trackingNumber: true, originCountryCode: true, destinationCountryCode: true, carrierConnectionStatus: true, trackingProvider: true, providerCarrierCode: true },
   });
   if (!shipment) throw new CarrierTrackingOperationError("SHIPMENT_NOT_FOUND");
   if (shipment.carrierConnectionStatus === CarrierConnectionStatus.ACTIVE && shipment.trackingProvider === provider.name) {
@@ -52,6 +52,9 @@ export async function registerShipmentTracking(
   const request = trackingRequestSchema.safeParse({
     trackingNumber: shipment.trackingNumber ?? "",
     carrierCode: suppliedCarrierCode || shipment.providerCarrierCode || undefined,
+    clientTrackerId: `parceltrack:${shipment.id}`,
+    originCountryCode: shipment.originCountryCode ?? undefined,
+    destinationCountryCode: shipment.destinationCountryCode ?? undefined,
   });
   if (!request.success) throw new CarrierTrackingOperationError(TRACKING_ERROR_CODES.INVALID_INPUT);
   const claimed = await prisma.shipment.updateMany({
@@ -66,6 +69,7 @@ export async function registerShipmentTracking(
       data: {
         trackingProvider: provider.name,
         providerCarrierCode: result.carrierCode ?? request.data.carrierCode,
+        providerTrackerId: result.providerTrackerId,
         carrierConnectionStatus: CarrierConnectionStatus.ACTIVE,
         carrierRegisteredAt: new Date(),
         carrierLastErrorCode: null,
@@ -80,6 +84,7 @@ export async function registerShipmentTracking(
 }
 
 function validEvent(event: NormalizedCarrierEvent, now: number) {
+  if (event.occurredAt === null) return Boolean(event.providerOccurredAt);
   const timestamp = event.occurredAt.getTime();
   return Number.isFinite(timestamp) && timestamp <= now + MAX_EVENT_FUTURE_MS && timestamp >= now - MAX_EVENT_AGE_MS;
 }
@@ -88,6 +93,7 @@ type CarrierImportShipment = {
   id: string;
   trackingNumber: string;
   providerCarrierCode: string | null;
+  status?: ShipmentStatus;
 };
 
 export async function importCarrierTrackingInfo(
@@ -98,30 +104,31 @@ export async function importCarrierTrackingInfo(
   synchronizedAt = new Date(),
 ) {
   const now = synchronizedAt.getTime();
-  const recognized = info.events
+  const candidates = info.events
     .filter((event) => validEvent(event, now))
-    .map((event) => ({ event, status: map17TrackStatus(event.providerStatus, event.providerSubStatus) }))
-    .filter((item): item is { event: NormalizedCarrierEvent; status: ShipmentStatus } => item.status !== null);
-  const unknown = info.events.some(
-    (event) => validEvent(event, now) && map17TrackStatus(event.providerStatus, event.providerSubStatus) === null,
-  );
+    .map((event) => ({ event, mappedStatus: mapCarrierStatus(providerName, event.providerStatus, event.providerSubStatus) }));
+  const unknown = candidates.some(({ mappedStatus }) => mappedStatus === null);
   const warning = unknown ? TRACKING_ERROR_CODES.UNKNOWN_STATUS : null;
+  const importable = candidates.filter(({ mappedStatus }) => mappedStatus !== null || providerName === "ship24");
   const createResult = await tx.trackingEvent.createMany({
-    data: recognized.map(({ event, status }) => ({
+    data: importable.map(({ event, mappedStatus }) => ({
       shipmentId: shipment.id,
       source: TrackingEventSource.CARRIER,
-      status,
+      status: mappedStatus ?? shipment.status ?? ShipmentStatus.PENDING,
       description: event.description,
       location: event.location,
       city: event.city,
       countryCode: event.countryCode,
       occurredAt: event.occurredAt,
+      providerOccurredAt: event.providerOccurredAt,
+      providerEventOrder: event.providerEventOrder,
+      statusAffectsShipment: mappedStatus !== null && event.occurredAt !== null,
       providerEventId: carrierEventId(providerName, shipment.trackingNumber, event),
     })),
     skipDuplicates: true,
   });
   const newest = await tx.trackingEvent.findFirst({
-    where: { shipmentId: shipment.id },
+    where: { shipmentId: shipment.id, occurredAt: { not: null }, statusAffectsShipment: true },
     orderBy: [{ occurredAt: "desc" }, { createdAt: "desc" }, { id: "desc" }],
     select: { status: true, occurredAt: true },
   });
@@ -134,7 +141,7 @@ export async function importCarrierTrackingInfo(
   };
   if (newest) {
     data.status = newest.status;
-    if (newest.status === ShipmentStatus.DELIVERED) data.deliveredAt = newest.occurredAt;
+    if (newest.status === ShipmentStatus.DELIVERED && newest.occurredAt) data.deliveredAt = newest.occurredAt;
   }
   await tx.shipment.update({ where: { id: shipment.id }, data });
   return { imported: createResult.count, warning };
@@ -147,13 +154,13 @@ export async function syncShipmentTracking(
   if (!provider.enabled) throw new CarrierTrackingOperationError(TRACKING_ERROR_CODES.DISABLED);
   const shipment = await prisma.shipment.findUnique({
     where: { id: shipmentId },
-    select: { trackingNumber: true, providerCarrierCode: true, trackingProvider: true, carrierConnectionStatus: true },
+    select: { trackingNumber: true, providerCarrierCode: true, providerTrackerId: true, trackingProvider: true, carrierConnectionStatus: true, status: true },
   });
   if (!shipment) throw new CarrierTrackingOperationError("SHIPMENT_NOT_FOUND");
   if (shipment.carrierConnectionStatus !== CarrierConnectionStatus.ACTIVE || shipment.trackingProvider !== provider.name) {
     throw new CarrierTrackingOperationError("PROVIDER_NOT_ACTIVE");
   }
-  const request = trackingRequestSchema.safeParse({ trackingNumber: shipment.trackingNumber ?? "", carrierCode: shipment.providerCarrierCode ?? undefined });
+  const request = trackingRequestSchema.safeParse({ trackingNumber: shipment.trackingNumber ?? "", carrierCode: shipment.providerCarrierCode ?? undefined, providerTrackerId: shipment.providerTrackerId ?? undefined });
   if (!request.success) throw new CarrierTrackingOperationError(TRACKING_ERROR_CODES.INVALID_INPUT);
 
   let info;
@@ -167,6 +174,7 @@ export async function syncShipmentTracking(
           id: shipmentId,
           trackingNumber: request.data.trackingNumber,
           providerCarrierCode: shipment.providerCarrierCode,
+          status: shipment.status,
         }, provider.name, info),
         { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
       );

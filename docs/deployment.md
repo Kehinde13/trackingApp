@@ -20,6 +20,8 @@ No variable is browser-public and none may use a `NEXT_PUBLIC_` prefix.
 | `TRACKING_PROVIDER` | Optional; defaults to `disabled` | Must be `disabled` | `disabled` unless intentionally testing |
 | `TRACKING_PROVIDER_API_KEY` | Required only when provider is `17track` | Never use the production key | Optional local test key only |
 | `TRACKING_WEBHOOK_SECRET` | Required and independent when provider is `17track` | Never use the production secret | Optional invented local value |
+| `SHIP24_API_KEY` | Required only when provider is `ship24` | Never use the production key | Optional invented local value only |
+| `SHIP24_WEBHOOK_SECRET` | Required only when the Ship24 webhook is activated; independent from its API key | Never use the production secret | Optional invented local value only |
 | `SHADOW_DATABASE_URL` | Not used | Not used | Development migrations only |
 
 `VERCEL`, `VERCEL_ENV`, `VERCEL_URL`, and
@@ -53,6 +55,12 @@ be automatically exposed to Preview deployments. Preview must use a separate
 non-production database (or no Preview deployment), `TRACKING_PROVIDER=disabled`,
 invented secrets, no production provider/webhook credentials, and no production
 administrator.
+
+Ship24 activation is a separate controlled release step. Keep Production and
+Preview credentials isolated, treat free-plan tracker quota as scarce, and
+prefer webhooks to polling. One tracker generally represents one shipment.
+ParcelTrack transmits no recipient name, email, telephone, address, or
+postcode. The API key and webhook Bearer secret are independent.
 
 Run `npm run deployment:check` with the intended environment before release.
 Changing an environment variable requires a new deployment.
