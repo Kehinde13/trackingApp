@@ -60,12 +60,13 @@ const reference = z
 const trackingNumber = z
   .string()
   .trim()
+  .min(1, "Tracking number is required.")
   .max(60, "Tracking number must be 60 characters or fewer.")
   .refine(
-    (value) => value === "" || /^[A-Za-z0-9][A-Za-z0-9\s-]*$/.test(value),
-    "Tracking number contains unsupported characters.",
+    (value) => /^[A-Za-z0-9][A-Za-z0-9_-]*$/.test(value),
+    "Use letters, numbers, hyphens, or underscores.",
   )
-  .transform((value) => (value === "" ? null : normalizeTrackingNumber(value)));
+  .transform(normalizeTrackingNumber);
 
 const packageMetadataShape = {
   recipientName: optionalText("Recipient name", 120),

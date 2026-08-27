@@ -23,8 +23,9 @@ describe("shipment normalization", () => {
     expect(normalizeCarrierCode("  DHL ")).toBe("dhl");
   });
 
-  it("normalizes tracking numbers to uppercase without whitespace", () => {
-    expect(normalizeTrackingNumber(" jd 01 23-45 ")).toBe("JD0123-45");
+  it("trims and uppercases tracking numbers without altering meaningful characters", () => {
+    expect(normalizeTrackingNumber(" ship24_sample-in_transit-828 ")).toBe("SHIP24_SAMPLE-IN_TRANSIT-828");
+    expect(normalizeTrackingNumber("AB 123")).toBe("AB 123");
   });
 
   it("normalizes ISO country codes to uppercase", () => {

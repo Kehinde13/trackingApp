@@ -7,12 +7,13 @@ const response = (value: unknown, status = 200) => new Response(JSON.stringify(v
 
 describe("Ship24 provider", () => {
   it("registers a minimal tracker with bearer authentication and no recipient data", async () => {
-    const fetcher = vi.fn(async () => response({ data: { tracker } }));
+    const sampleTrackingNumber = "SHIP24_SAMPLE_IN_TRANSIT_828";
+    const fetcher = vi.fn(async () => response({ data: { tracker: { ...tracker, trackingNumber: sampleTrackingNumber } } }));
     const provider = new Ship24Provider("invented-api-key", fetcher as typeof fetch, async () => {});
-    await expect(provider.registerTracking({ trackingNumber: "FAKE123456", clientTrackerId: tracker.clientTrackerId, destinationCountryCode: "NG" })).resolves.toEqual({ providerTrackerId: tracker.trackerId, carrierCode: "mock-courier" });
+    await expect(provider.registerTracking({ trackingNumber: sampleTrackingNumber, clientTrackerId: tracker.clientTrackerId, destinationCountryCode: "NG" })).resolves.toEqual({ providerTrackerId: tracker.trackerId, carrierCode: "mock-courier" });
     const [, init] = fetcher.mock.calls[0] as unknown as [string, RequestInit];
     expect(init?.headers).toMatchObject({ Authorization: "Bearer invented-api-key" });
-    expect(JSON.parse(String(init?.body))).toEqual({ trackingNumber: "FAKE123456", clientTrackerId: tracker.clientTrackerId, destinationCountryCode: "NG" });
+    expect(JSON.parse(String(init?.body))).toEqual({ trackingNumber: sampleTrackingNumber, clientTrackerId: tracker.clientTrackerId, destinationCountryCode: "NG" });
     expect(String(init?.body)).not.toMatch(/recipient|email|telephone|address|postcode/i);
   });
   it("retrieves results only by the stored tracker id", async () => {

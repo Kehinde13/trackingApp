@@ -49,7 +49,7 @@ export function normalizeCarrierName(value: string): string {
 }
 
 export function normalizeTrackingNumber(value: string): string {
-  return value.trim().replace(/\s+/g, "").toUpperCase();
+  return value.trim().toUpperCase();
 }
 
 export function normalizeCountryCode(value: string): string {

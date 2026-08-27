@@ -22,6 +22,9 @@ type FieldProps = {
   hint?: string;
   type?: "text" | "date";
   autoComplete?: string;
+  pattern?: string;
+  maxLength?: number;
+  required?: boolean;
 };
 
 function FormField({
@@ -31,6 +34,9 @@ function FormField({
   hint,
   type = "text",
   autoComplete,
+  pattern,
+  maxLength,
+  required,
 }: FieldProps) {
   const error = state.fieldErrors[name]?.[0];
   const descriptionId = `${name}-${error ? "error" : "hint"}`;
@@ -44,6 +50,9 @@ function FormField({
         type={type}
         defaultValue={state.values[name]}
         autoComplete={autoComplete}
+        pattern={pattern}
+        maxLength={maxLength}
+        required={required}
         aria-invalid={error ? true : undefined}
         aria-describedby={error || hint ? descriptionId : undefined}
       />
@@ -72,7 +81,15 @@ export function PackageForm({ action, initialState, cancelHref, mode }: PackageF
         <FormField state={state} name="recipientName" label="Recipient name" autoComplete="name" />
         <FormField state={state} name="carrierCode" label="Carrier code" hint="For example: dhl" />
         <FormField state={state} name="carrierName" label="Carrier display name" />
-        <FormField state={state} name="trackingNumber" label="Tracking number" />
+        <FormField
+          state={state}
+          name="trackingNumber"
+          label="Tracking number"
+          hint="Letters, numbers, hyphens, or underscores; up to 60 characters."
+          pattern="[A-Za-z0-9][A-Za-z0-9_-]*"
+          maxLength={60}
+          required
+        />
         <FormField state={state} name="estimatedDeliveryAt" label="Estimated delivery date" type="date" />
         <FormField state={state} name="originCity" label="Origin city" autoComplete="address-level2" />
         <FormField state={state} name="originCountryCode" label="Origin country code" hint="Two letters, such as DE" />

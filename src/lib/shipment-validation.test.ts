@@ -7,7 +7,7 @@ const validInput = {
   recipientName: " Demo Recipient ",
   carrierCode: " DHL ",
   carrierName: " DHL Express ",
-  trackingNumber: " jd 001-99 ",
+  trackingNumber: " jd001-99 ",
   originCity: " Berlin ",
   originCountryCode: " de ",
   destinationCity: " Lagos ",
@@ -25,11 +25,28 @@ describe("createPackageSchema", () => {
     expect(result.estimatedDeliveryAt).toBeInstanceOf(Date);
   });
 
+  it.each([
+    ["SHIP24_SAMPLE_IN_TRANSIT_828", "SHIP24_SAMPLE_IN_TRANSIT_828"],
+    [" ordinary12345 ", "ORDINARY12345"],
+    ["track-12345", "TRACK-12345"],
+  ])("accepts and safely normalizes tracking number %s", (input, expected) => {
+    expect(createPackageSchema.parse({ ...validInput, trackingNumber: input }).trackingNumber).toBe(expected);
+  });
+
+  it("rejects empty and unsafe tracking numbers", () => {
+    for (const input of ["", "   ", "AB 12345", "AB\u000012345", "AB/12345"]) {
+      expect(createPackageSchema.safeParse({ ...validInput, trackingNumber: input }).success).toBe(false);
+    }
+  });
+
   it("converts blank optional fields to null", () => {
-    const result = createPackageSchema.parse(
-      Object.fromEntries(Object.keys(validInput).map((key) => [key, ""])),
-    );
-    expect(Object.values(result).every((value) => value === null)).toBe(true);
+    const blank = Object.fromEntries(Object.keys(validInput).map((key) => [key, ""]));
+    const result = createPackageSchema.parse({
+      ...blank,
+      trackingNumber: "SHIP24_SAMPLE_IN_TRANSIT_828",
+    });
+    expect(result.trackingNumber).toBe("SHIP24_SAMPLE_IN_TRANSIT_828");
+    expect(Object.entries(result).filter(([key]) => key !== "trackingNumber").every(([, value]) => value === null)).toBe(true);
   });
 
   it("rejects invalid country codes, dates, and control characters", () => {
@@ -44,6 +61,14 @@ describe("createPackageSchema", () => {
 });
 
 describe("editPackageSchema", () => {
+  it("accepts and preserves Ship24 sample underscores", () => {
+    const result = editPackageSchema.parse({
+      ...validInput,
+      trackingNumber: " SHIP24_SAMPLE_IN_TRANSIT_828 ",
+    });
+    expect(result.trackingNumber).toBe("SHIP24_SAMPLE_IN_TRANSIT_828");
+  });
+
   it("requires a package reference while allowing optional metadata", () => {
     const result = editPackageSchema.safeParse({ ...validInput, reference: "" });
     expect(result.success).toBe(false);
