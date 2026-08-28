@@ -39,6 +39,7 @@ export async function process17TrackWebhook(
               "17track",
               normalize17TrackTrackingItem(data),
               processedAt,
+              "webhook",
             );
             receiptOutcome = ProviderWebhookOutcome.PROCESSED;
           } else receiptOutcome = ProviderWebhookOutcome.UNMATCHED;

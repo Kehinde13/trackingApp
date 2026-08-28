@@ -33,7 +33,7 @@ export type TrackingInfo = {
   currentStatus?: {
     providerStatus: string;
     providerSubStatus?: string;
-    observedAt: Date;
+    providerGeneratedAt: Date;
   };
   events: NormalizedCarrierEvent[];
 };

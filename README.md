@@ -72,9 +72,11 @@ uses **Sync now** to import immutable carrier events. Synchronization is
 idempotent and carrier events remain visibly distinct from administrator events.
 When a provider supplies an explicit current shipment status, ParcelTrack uses
 that authoritative snapshot without rewriting the historical event occurrence
-times. Stale snapshots and genuinely newer administrator updates retain
-precedence; the system-created Pending event remains an audit event rather than
-overriding a current provider status.
+times. A successful administrator-initiated pull assigns its observation time
+on the server; a webhook retains the provider-generated time for stale-delivery
+ordering. Genuinely newer administrator updates retain precedence, and the
+system-created Pending event remains an audit event rather than overriding a
+freshly observed provider status.
 Unknown provider statuses are recorded as a safe warning and do not change the
 shipment status.
 

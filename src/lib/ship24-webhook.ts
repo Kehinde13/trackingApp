@@ -38,7 +38,7 @@ export async function processShip24Webhook(
             select: { id: true, trackingNumber: true, providerCarrierCode: true },
           });
           if (!shipment?.trackingNumber) continue;
-          await importCarrierTrackingInfo(tx, { ...shipment, trackingNumber: shipment.trackingNumber }, "ship24", normalizeShip24Tracking(tracking), processedAt);
+          await importCarrierTrackingInfo(tx, { ...shipment, trackingNumber: shipment.trackingNumber }, "ship24", normalizeShip24Tracking(tracking), processedAt, "webhook");
           matched += 1;
         }
         const receiptOutcome = matched ? ProviderWebhookOutcome.PROCESSED : ProviderWebhookOutcome.UNMATCHED;

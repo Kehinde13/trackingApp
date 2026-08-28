@@ -128,12 +128,12 @@ export function normalizeShip24Tracking(tracking: Ship24Tracking): TrackingInfo 
   const codes = Array.isArray(tracking.tracker.courierCode)
     ? tracking.tracker.courierCode
     : [tracking.tracker.courierCode];
-  const observedAt = parseGeneratedAt(tracking.metadata?.generatedAt);
-  const currentStatus = tracking.shipment && observedAt
+  const providerGeneratedAt = parseGeneratedAt(tracking.metadata?.generatedAt);
+  const currentStatus = tracking.shipment && providerGeneratedAt
     ? {
         providerStatus: tracking.shipment.statusMilestone,
         ...(tracking.shipment.statusCode ? { providerSubStatus: tracking.shipment.statusCode } : {}),
-        observedAt,
+        providerGeneratedAt,
       }
     : undefined;
   return {

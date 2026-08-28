@@ -5,17 +5,19 @@ import { TRACKING_ERROR_CODES, TrackingProviderError, type TrackingInfo, type Tr
 
 const findUnique = vi.fn();
 const update = vi.fn();
+const runTransaction = vi.fn();
 
 vi.mock("@/lib/prisma", () => ({
   prisma: {
     shipment: { findUnique, update },
+    $transaction: runTransaction,
   },
 }));
 
 const julyInfo: TrackingInfo = {
   currentStatus: {
     providerStatus: "in_transit",
-    observedAt: new Date("2026-08-10T12:00:00Z"),
+    providerGeneratedAt: new Date("2026-07-02T12:00:00Z"),
   },
   events: [
     { stableId: "info", occurredAt: new Date("2026-07-01T10:00:00Z"), providerStatus: "info_received", description: "Information received" },
@@ -75,7 +77,7 @@ describe("authoritative carrier status reconciliation", () => {
     expect(database.tx.trackingEvent).not.toHaveProperty("delete");
   });
 
-  it("keeps the authoritative status and creates no duplicates on a repeated synchronization", async () => {
+  it("treats a successful pull as freshly observed even when provider generation and events are historical", async () => {
     const { importCarrierTrackingInfo } = await import("@/lib/carrier-tracking");
     const database = transaction({
       previousSyncAt: new Date("2026-08-10T12:00:01Z"),
@@ -88,9 +90,15 @@ describe("authoritative carrier status reconciliation", () => {
       "ship24",
       julyInfo,
       new Date("2026-08-10T12:00:02Z"),
+      "pull",
     );
     expect(result.imported).toBe(0);
-    expect(database.shipmentUpdate.mock.calls[0][0].data).not.toHaveProperty("status");
+    expect(database.shipmentUpdate).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        status: ShipmentStatus.IN_TRANSIT,
+        carrierLastSuccessfulSyncAt: new Date("2026-08-10T12:00:02Z"),
+      }),
+    }));
   });
 
   it("rejects stale provider state and preserves a genuinely newer administrator update", async () => {
@@ -98,7 +106,7 @@ describe("authoritative carrier status reconciliation", () => {
     const base = {
       hasAuthoritativeStatus: true,
       authoritativeStatus: ShipmentStatus.IN_TRANSIT,
-      authoritativeObservedAt: new Date("2026-08-10T12:00:00Z"),
+      authoritativeFreshnessAt: new Date("2026-08-10T12:00:00Z"),
       authoritativeEvidenceAt: new Date("2026-07-02T10:00:00Z"),
       previousSyncAt: null,
       newestCarrierBefore: new Date("2026-07-03T10:00:00Z"),
@@ -114,12 +122,50 @@ describe("authoritative carrier status reconciliation", () => {
     })).toBeNull();
   });
 
+  it("orders webhook snapshots by provider generation time instead of receipt time", async () => {
+    const { reconcileCarrierStatus } = await import("@/lib/carrier-tracking");
+    const base = {
+      hasAuthoritativeStatus: true,
+      authoritativeStatus: ShipmentStatus.IN_TRANSIT,
+      authoritativeEvidenceAt: new Date("2026-08-10T11:00:00Z"),
+      previousSyncAt: new Date("2026-08-10T12:00:00Z"),
+      newestCarrierBefore: new Date("2026-08-10T10:00:00Z"),
+      newestAdmin: null,
+      fallbackNewest: null,
+      newestDeliveredAt: null,
+    };
+
+    expect(reconcileCarrierStatus({
+      ...base,
+      authoritativeFreshnessAt: new Date("2026-08-10T11:59:59Z"),
+    })).toBeNull();
+    expect(reconcileCarrierStatus({
+      ...base,
+      authoritativeFreshnessAt: new Date("2026-08-10T12:00:01Z"),
+    })).toEqual({ status: ShipmentStatus.IN_TRANSIT });
+  });
+
+  it("keeps a genuinely newer administrator update authoritative during provider reconciliation", async () => {
+    const { reconcileCarrierStatus } = await import("@/lib/carrier-tracking");
+    expect(reconcileCarrierStatus({
+      hasAuthoritativeStatus: true,
+      authoritativeStatus: ShipmentStatus.IN_TRANSIT,
+      authoritativeFreshnessAt: new Date("2026-08-20T12:00:00Z"),
+      authoritativeEvidenceAt: new Date("2026-08-20T10:00:00Z"),
+      previousSyncAt: new Date("2026-08-19T12:00:00Z"),
+      newestCarrierBefore: null,
+      newestAdmin: new Date("2026-08-20T11:00:00Z"),
+      fallbackNewest: { status: ShipmentStatus.DELAYED, occurredAt: new Date("2026-08-20T11:00:00Z") },
+      newestDeliveredAt: null,
+    })).toBeNull();
+  });
+
   it("preserves delivery time and supports later non-linear authoritative states", async () => {
     const { reconcileCarrierStatus } = await import("@/lib/carrier-tracking");
     const deliveredAt = new Date("2026-07-02T10:00:00Z");
     const base = {
       hasAuthoritativeStatus: true,
-      authoritativeObservedAt: new Date("2026-07-02T11:00:00Z"),
+      authoritativeFreshnessAt: new Date("2026-07-02T11:00:00Z"),
       authoritativeEvidenceAt: deliveredAt,
       previousSyncAt: null,
       newestCarrierBefore: null,
@@ -133,6 +179,39 @@ describe("authoritative carrier status reconciliation", () => {
 });
 
 describe("carrier synchronization failures", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("assigns the current-status observation time on the server after a successful provider pull", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-20T12:00:00Z"));
+    findUnique.mockResolvedValue({
+      trackingNumber: "SHIP24_SAMPLE_IN_TRANSIT_828",
+      providerCarrierCode: null,
+      providerTrackerId: "tracker",
+      trackingProvider: "ship24",
+      carrierConnectionStatus: CarrierConnectionStatus.ACTIVE,
+    });
+    const provider: TrackingProvider = {
+      name: "ship24",
+      enabled: true,
+      registerTracking: vi.fn(),
+      getTrackingInfo: vi.fn().mockResolvedValue(julyInfo),
+    };
+    const database = transaction({ previousSyncAt: new Date("2026-08-19T12:00:00Z"), imported: 0 });
+    runTransaction.mockImplementation(async (callback) => callback(database.tx));
+
+    const { syncShipmentTracking } = await import("@/lib/carrier-tracking");
+    await syncShipmentTracking("shipment", provider);
+
+    expect(database.shipmentUpdate).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        status: ShipmentStatus.IN_TRANSIT,
+        carrierLastSuccessfulSyncAt: new Date("2026-08-20T12:00:00Z"),
+      }),
+    }));
+    vi.useRealTimers();
+  });
+
   it("records only the safe error state without changing shipment status", async () => {
     findUnique.mockResolvedValue({
       trackingNumber: "SHIP24_SAMPLE_IN_TRANSIT_828",

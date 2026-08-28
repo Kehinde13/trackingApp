@@ -21,7 +21,7 @@ describe("Ship24 provider", () => {
     const result = await new Ship24Provider("invented", fetcher as typeof fetch, async () => {}).getTrackingInfo({ trackingNumber: "FAKE123456", providerTrackerId: tracker.trackerId });
     expect((fetcher.mock.calls[0] as unknown as [string])[0]).toBe(`https://api.ship24.com/public/v1/trackers/${tracker.trackerId}/results`);
     expect(result.events[0]).toMatchObject({ stableId: "evt-1", occurredAt: new Date("2026-08-20T10:00:00Z"), providerEventOrder: 1, providerStatus: "in_transit" });
-    expect(result.currentStatus).toEqual({ providerStatus: "in_transit", observedAt: new Date("2026-08-20T11:00:00Z") });
+    expect(result.currentStatus).toEqual({ providerStatus: "in_transit", providerGeneratedAt: new Date("2026-08-20T11:00:00Z") });
   });
   it.each([["2026-08-20T10:00:00Z", "2026-08-20T10:00:00.000Z"], ["2026-08-20T10:00:00+02:00", "2026-08-20T08:00:00.000Z"], ["2026-08-20T10:00:00", null], ["2026-08-20", null]])("preserves timestamp semantics for %s", (input, expected) => {
     const parsed = parseShip24Timestamp(input);

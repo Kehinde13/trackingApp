@@ -100,7 +100,7 @@ type StatusPoint = { status: ShipmentStatus; occurredAt: Date };
 type CarrierStatusReconciliationInput = {
   hasAuthoritativeStatus: boolean;
   authoritativeStatus: ShipmentStatus | null;
-  authoritativeObservedAt: Date | null;
+  authoritativeFreshnessAt: Date | null;
   authoritativeEvidenceAt: Date | null;
   previousSyncAt: Date | null;
   newestCarrierBefore: Date | null;
@@ -112,7 +112,7 @@ type CarrierStatusReconciliationInput = {
 export function reconcileCarrierStatus({
   hasAuthoritativeStatus,
   authoritativeStatus,
-  authoritativeObservedAt,
+  authoritativeFreshnessAt,
   authoritativeEvidenceAt,
   previousSyncAt,
   newestCarrierBefore,
@@ -121,8 +121,8 @@ export function reconcileCarrierStatus({
   newestDeliveredAt,
 }: CarrierStatusReconciliationInput): { status: ShipmentStatus; deliveredAt?: Date } | null {
   if (hasAuthoritativeStatus) {
-    if (!authoritativeStatus || !authoritativeObservedAt || !authoritativeEvidenceAt) return null;
-    if (previousSyncAt && authoritativeObservedAt.getTime() < previousSyncAt.getTime()) return null;
+    if (!authoritativeStatus || !authoritativeFreshnessAt || !authoritativeEvidenceAt) return null;
+    if (previousSyncAt && authoritativeFreshnessAt.getTime() < previousSyncAt.getTime()) return null;
     if (newestCarrierBefore && authoritativeEvidenceAt.getTime() < newestCarrierBefore.getTime()) return null;
     if (newestAdmin && newestAdmin.getTime() > authoritativeEvidenceAt.getTime()) return null;
     return authoritativeStatus === ShipmentStatus.DELIVERED && newestDeliveredAt
@@ -142,6 +142,7 @@ export async function importCarrierTrackingInfo(
   providerName: string,
   info: TrackingInfo,
   synchronizedAt = new Date(),
+  snapshotSource: "pull" | "webhook" = "pull",
 ) {
   const now = synchronizedAt.getTime();
   const storedShipment = await tx.shipment.findUniqueOrThrow({
@@ -205,7 +206,9 @@ export async function importCarrierTrackingInfo(
   const shipmentStatusUpdate = reconcileCarrierStatus({
     hasAuthoritativeStatus,
     authoritativeStatus,
-    authoritativeObservedAt: info.currentStatus?.observedAt ?? null,
+    authoritativeFreshnessAt: info.currentStatus
+      ? snapshotSource === "pull" ? synchronizedAt : info.currentStatus.providerGeneratedAt
+      : null,
     authoritativeEvidenceAt,
     previousSyncAt: storedShipment.carrierLastSuccessfulSyncAt,
     newestCarrierBefore: newestCarrierBefore?.occurredAt ?? null,
@@ -244,6 +247,7 @@ export async function syncShipmentTracking(
   let info;
   try { info = await provider.getTrackingInfo(request.data); }
   catch (error: unknown) { await setConnectionError(shipmentId, error); throw new CarrierTrackingOperationError(safeErrorCode(error)); }
+  const observedAt = new Date();
 
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
@@ -252,7 +256,7 @@ export async function syncShipmentTracking(
           id: shipmentId,
           trackingNumber: request.data.trackingNumber,
           providerCarrierCode: shipment.providerCarrierCode,
-        }, provider.name, info),
+        }, provider.name, info, observedAt, "pull"),
         { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
       );
     } catch (error: unknown) {
