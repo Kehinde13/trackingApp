@@ -7,6 +7,7 @@ import {
   TrackingProviderError,
   trackingRequestSchema,
   type NormalizedCarrierEvent,
+  type TrackingInfo,
   type TrackingProvider,
   type TrackingRequest,
 } from "@/lib/tracking-provider";
@@ -37,8 +38,17 @@ const eventSchema = z.object({
   statusCode: nullableString,
   statusMilestone: z.string().min(1).max(100),
 });
+const metadataSchema = z.object({
+  generatedAt: z.string().min(10).max(40),
+});
+const shipmentSchema = z.object({
+  statusCode: nullableString,
+  statusMilestone: z.string().min(1).max(100),
+});
 const trackingSchema = z.object({
+  metadata: metadataSchema.optional(),
   tracker: trackerSchema,
+  shipment: shipmentSchema.optional(),
   events: z.array(eventSchema).max(10_000),
 });
 const registerResponseSchema = z.object({ data: z.object({ tracker: trackerSchema }) });
@@ -93,7 +103,13 @@ export function parseShip24Timestamp(value: string): ParsedShip24Timestamp | nul
   return { occurredAt: null, providerOccurredAt: source };
 }
 
-export function normalizeShip24Tracking(tracking: Ship24Tracking) {
+function parseGeneratedAt(value: string | undefined): Date | null {
+  if (!value || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(?:Z|[+-]\d{2}:\d{2})$/.test(value)) return null;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+export function normalizeShip24Tracking(tracking: Ship24Tracking): TrackingInfo {
   const events: NormalizedCarrierEvent[] = [];
   for (const event of tracking.events) {
     const timestamp = parseShip24Timestamp(event.occurrenceDatetime);
@@ -112,7 +128,19 @@ export function normalizeShip24Tracking(tracking: Ship24Tracking) {
   const codes = Array.isArray(tracking.tracker.courierCode)
     ? tracking.tracker.courierCode
     : [tracking.tracker.courierCode];
-  return { carrierCode: codes.map((value) => safeCourierCode(value)).find(Boolean), events };
+  const observedAt = parseGeneratedAt(tracking.metadata?.generatedAt);
+  const currentStatus = tracking.shipment && observedAt
+    ? {
+        providerStatus: tracking.shipment.statusMilestone,
+        ...(tracking.shipment.statusCode ? { providerSubStatus: tracking.shipment.statusCode } : {}),
+        observedAt,
+      }
+    : undefined;
+  return {
+    carrierCode: codes.map((value) => safeCourierCode(value)).find(Boolean),
+    ...(currentStatus ? { currentStatus } : {}),
+    events,
+  };
 }
 
 function registrationBody(input: TrackingRequest) {

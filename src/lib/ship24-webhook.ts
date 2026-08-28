@@ -35,7 +35,7 @@ export async function processShip24Webhook(
                 ...(clientShipmentId ? [{ id: clientShipmentId }] : []),
               ],
             },
-            select: { id: true, trackingNumber: true, providerCarrierCode: true, status: true },
+            select: { id: true, trackingNumber: true, providerCarrierCode: true },
           });
           if (!shipment?.trackingNumber) continue;
           await importCarrierTrackingInfo(tx, { ...shipment, trackingNumber: shipment.trackingNumber }, "ship24", normalizeShip24Tracking(tracking), processedAt);

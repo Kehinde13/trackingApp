@@ -17,10 +17,11 @@ describe("Ship24 provider", () => {
     expect(String(init?.body)).not.toMatch(/recipient|email|telephone|address|postcode/i);
   });
   it("retrieves results only by the stored tracker id", async () => {
-    const fetcher = vi.fn(async () => response({ data: { trackings: [{ tracker, events: [{ eventId: "evt-1", status: "In transit", occurrenceDatetime: "2026-08-20T10:00:00Z", order: 1, location: "Test hub", courierCode: "mock-courier", statusCode: "transit_handover", statusMilestone: "in_transit" }] }] } }));
+    const fetcher = vi.fn(async () => response({ data: { trackings: [{ metadata: { generatedAt: "2026-08-20T11:00:00Z" }, tracker, shipment: { statusCode: null, statusMilestone: "in_transit" }, events: [{ eventId: "evt-1", status: "In transit", occurrenceDatetime: "2026-08-20T10:00:00Z", order: 1, location: "Test hub", courierCode: "mock-courier", statusCode: "transit_handover", statusMilestone: "in_transit" }] }] } }));
     const result = await new Ship24Provider("invented", fetcher as typeof fetch, async () => {}).getTrackingInfo({ trackingNumber: "FAKE123456", providerTrackerId: tracker.trackerId });
     expect((fetcher.mock.calls[0] as unknown as [string])[0]).toBe(`https://api.ship24.com/public/v1/trackers/${tracker.trackerId}/results`);
     expect(result.events[0]).toMatchObject({ stableId: "evt-1", occurredAt: new Date("2026-08-20T10:00:00Z"), providerEventOrder: 1, providerStatus: "in_transit" });
+    expect(result.currentStatus).toEqual({ providerStatus: "in_transit", observedAt: new Date("2026-08-20T11:00:00Z") });
   });
   it.each([["2026-08-20T10:00:00Z", "2026-08-20T10:00:00.000Z"], ["2026-08-20T10:00:00+02:00", "2026-08-20T08:00:00.000Z"], ["2026-08-20T10:00:00", null], ["2026-08-20", null]])("preserves timestamp semantics for %s", (input, expected) => {
     const parsed = parseShip24Timestamp(input);
@@ -29,8 +30,9 @@ describe("Ship24 provider", () => {
   });
   it("rejects impossible dates and strips recipient fields", () => {
     expect(parseShip24Timestamp("2026-02-30T10:00:00")).toBeNull();
-    const normalized = normalizeShip24Tracking({ tracker, events: [{ eventId: "evt", status: "Moving", occurrenceDatetime: "2026-08-20", statusMilestone: "future_status", recipient: { name: "Never retain" } } as never] });
+    const normalized = normalizeShip24Tracking({ metadata: { generatedAt: "2026-08-20T11:00:00Z" }, tracker, shipment: { statusCode: "exception_return", statusMilestone: "exception" }, events: [{ eventId: "evt", status: "Moving", occurrenceDatetime: "2026-08-20", statusMilestone: "future_status", recipient: { name: "Never retain" } } as never] });
     expect(JSON.stringify(normalized)).not.toContain("Never retain");
+    expect(normalized.currentStatus).toMatchObject({ providerStatus: "exception", providerSubStatus: "exception_return" });
   });
   it("returns safe errors", async () => {
     const provider = new Ship24Provider("never-leak", async () => response({ private: "FAKE123456" }, 401) as never, async () => {});

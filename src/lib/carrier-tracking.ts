@@ -93,8 +93,48 @@ type CarrierImportShipment = {
   id: string;
   trackingNumber: string;
   providerCarrierCode: string | null;
-  status?: ShipmentStatus;
 };
+
+type StatusPoint = { status: ShipmentStatus; occurredAt: Date };
+
+type CarrierStatusReconciliationInput = {
+  hasAuthoritativeStatus: boolean;
+  authoritativeStatus: ShipmentStatus | null;
+  authoritativeObservedAt: Date | null;
+  authoritativeEvidenceAt: Date | null;
+  previousSyncAt: Date | null;
+  newestCarrierBefore: Date | null;
+  newestAdmin: Date | null;
+  fallbackNewest: StatusPoint | null;
+  newestDeliveredAt: Date | null;
+};
+
+export function reconcileCarrierStatus({
+  hasAuthoritativeStatus,
+  authoritativeStatus,
+  authoritativeObservedAt,
+  authoritativeEvidenceAt,
+  previousSyncAt,
+  newestCarrierBefore,
+  newestAdmin,
+  fallbackNewest,
+  newestDeliveredAt,
+}: CarrierStatusReconciliationInput): { status: ShipmentStatus; deliveredAt?: Date } | null {
+  if (hasAuthoritativeStatus) {
+    if (!authoritativeStatus || !authoritativeObservedAt || !authoritativeEvidenceAt) return null;
+    if (previousSyncAt && authoritativeObservedAt.getTime() < previousSyncAt.getTime()) return null;
+    if (newestCarrierBefore && authoritativeEvidenceAt.getTime() < newestCarrierBefore.getTime()) return null;
+    if (newestAdmin && newestAdmin.getTime() > authoritativeEvidenceAt.getTime()) return null;
+    return authoritativeStatus === ShipmentStatus.DELIVERED && newestDeliveredAt
+      ? { status: authoritativeStatus, deliveredAt: newestDeliveredAt }
+      : { status: authoritativeStatus };
+  }
+
+  if (!fallbackNewest) return null;
+  return fallbackNewest.status === ShipmentStatus.DELIVERED
+    ? { status: fallbackNewest.status, deliveredAt: fallbackNewest.occurredAt }
+    : { status: fallbackNewest.status };
+}
 
 export async function importCarrierTrackingInfo(
   tx: Prisma.TransactionClient,
@@ -104,17 +144,31 @@ export async function importCarrierTrackingInfo(
   synchronizedAt = new Date(),
 ) {
   const now = synchronizedAt.getTime();
+  const storedShipment = await tx.shipment.findUniqueOrThrow({
+    where: { id: shipment.id },
+    select: { status: true, carrierLastSuccessfulSyncAt: true },
+  });
   const candidates = info.events
     .filter((event) => validEvent(event, now))
     .map((event) => ({ event, mappedStatus: mapCarrierStatus(providerName, event.providerStatus, event.providerSubStatus) }));
-  const unknown = candidates.some(({ mappedStatus }) => mappedStatus === null);
+  const hasAuthoritativeStatus = info.currentStatus !== undefined;
+  const authoritativeStatus = info.currentStatus
+    ? mapCarrierStatus(providerName, info.currentStatus.providerStatus, info.currentStatus.providerSubStatus)
+    : null;
+  const unknown = candidates.some(({ mappedStatus }) => mappedStatus === null) ||
+    (hasAuthoritativeStatus && authoritativeStatus === null);
   const warning = unknown ? TRACKING_ERROR_CODES.UNKNOWN_STATUS : null;
   const importable = candidates.filter(({ mappedStatus }) => mappedStatus !== null || providerName === "ship24");
+  const newestCarrierBefore = await tx.trackingEvent.findFirst({
+    where: { shipmentId: shipment.id, source: TrackingEventSource.CARRIER, occurredAt: { not: null }, statusAffectsShipment: true },
+    orderBy: [{ occurredAt: "desc" }, { createdAt: "desc" }, { id: "desc" }],
+    select: { occurredAt: true },
+  });
   const createResult = await tx.trackingEvent.createMany({
     data: importable.map(({ event, mappedStatus }) => ({
       shipmentId: shipment.id,
       source: TrackingEventSource.CARRIER,
-      status: mappedStatus ?? shipment.status ?? ShipmentStatus.PENDING,
+      status: mappedStatus ?? storedShipment.status,
       description: event.description,
       location: event.location,
       city: event.city,
@@ -132,6 +186,33 @@ export async function importCarrierTrackingInfo(
     orderBy: [{ occurredAt: "desc" }, { createdAt: "desc" }, { id: "desc" }],
     select: { status: true, occurredAt: true },
   });
+  const newestAdmin = await tx.trackingEvent.findFirst({
+    where: { shipmentId: shipment.id, source: TrackingEventSource.ADMIN, occurredAt: { not: null }, statusAffectsShipment: true },
+    orderBy: [{ occurredAt: "desc" }, { createdAt: "desc" }, { id: "desc" }],
+    select: { occurredAt: true },
+  });
+  const newestDelivered = await tx.trackingEvent.findFirst({
+    where: { shipmentId: shipment.id, status: ShipmentStatus.DELIVERED, occurredAt: { not: null }, statusAffectsShipment: true },
+    orderBy: [{ occurredAt: "desc" }, { createdAt: "desc" }, { id: "desc" }],
+    select: { occurredAt: true },
+  });
+  const authoritativeEvidenceAt = authoritativeStatus
+    ? candidates
+        .filter(({ event, mappedStatus }) => mappedStatus === authoritativeStatus && event.occurredAt !== null)
+        .map(({ event }) => event.occurredAt!)
+        .sort((left, right) => right.getTime() - left.getTime())[0] ?? null
+    : null;
+  const shipmentStatusUpdate = reconcileCarrierStatus({
+    hasAuthoritativeStatus,
+    authoritativeStatus,
+    authoritativeObservedAt: info.currentStatus?.observedAt ?? null,
+    authoritativeEvidenceAt,
+    previousSyncAt: storedShipment.carrierLastSuccessfulSyncAt,
+    newestCarrierBefore: newestCarrierBefore?.occurredAt ?? null,
+    newestAdmin: newestAdmin?.occurredAt ?? null,
+    fallbackNewest: newest?.occurredAt ? { status: newest.status, occurredAt: newest.occurredAt } : null,
+    newestDeliveredAt: newestDelivered?.occurredAt ?? null,
+  });
   const data: Prisma.ShipmentUpdateInput = {
     providerCarrierCode: info.carrierCode ?? shipment.providerCarrierCode,
     carrierConnectionStatus: CarrierConnectionStatus.ACTIVE,
@@ -139,10 +220,7 @@ export async function importCarrierTrackingInfo(
     carrierLastErrorCode: warning,
     carrierLastErrorAt: warning ? synchronizedAt : null,
   };
-  if (newest) {
-    data.status = newest.status;
-    if (newest.status === ShipmentStatus.DELIVERED && newest.occurredAt) data.deliveredAt = newest.occurredAt;
-  }
+  if (shipmentStatusUpdate) Object.assign(data, shipmentStatusUpdate);
   await tx.shipment.update({ where: { id: shipment.id }, data });
   return { imported: createResult.count, warning };
 }
@@ -154,7 +232,7 @@ export async function syncShipmentTracking(
   if (!provider.enabled) throw new CarrierTrackingOperationError(TRACKING_ERROR_CODES.DISABLED);
   const shipment = await prisma.shipment.findUnique({
     where: { id: shipmentId },
-    select: { trackingNumber: true, providerCarrierCode: true, providerTrackerId: true, trackingProvider: true, carrierConnectionStatus: true, status: true },
+    select: { trackingNumber: true, providerCarrierCode: true, providerTrackerId: true, trackingProvider: true, carrierConnectionStatus: true },
   });
   if (!shipment) throw new CarrierTrackingOperationError("SHIPMENT_NOT_FOUND");
   if (shipment.carrierConnectionStatus !== CarrierConnectionStatus.ACTIVE || shipment.trackingProvider !== provider.name) {
@@ -174,7 +252,6 @@ export async function syncShipmentTracking(
           id: shipmentId,
           trackingNumber: request.data.trackingNumber,
           providerCarrierCode: shipment.providerCarrierCode,
-          status: shipment.status,
         }, provider.name, info),
         { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
       );

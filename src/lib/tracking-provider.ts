@@ -30,6 +30,11 @@ export type NormalizedCarrierEvent = {
 
 export type TrackingInfo = {
   carrierCode?: string;
+  currentStatus?: {
+    providerStatus: string;
+    providerSubStatus?: string;
+    observedAt: Date;
+  };
   events: NormalizedCarrierEvent[];
 };
 

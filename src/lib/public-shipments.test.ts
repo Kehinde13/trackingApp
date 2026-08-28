@@ -22,4 +22,41 @@ describe("public shipment DTO", () => {
     expect(findUnique.mock.calls[0][0].select.trackingEvents.orderBy).toEqual([{ occurredAt: { sort: "asc", nulls: "last" } }, { providerEventOrder: "asc" }, { createdAt: "asc" }, { id: "asc" }]);
     expect(findUnique.mock.calls[0][0].select).not.toHaveProperty("recipientName");
   });
+
+  it("exposes the same stored authoritative status to protected and public readers", async () => {
+    findUnique.mockResolvedValue({
+      id: "shipment",
+      reference: "PT-AUTHORITATIVE",
+      publicToken: "private-token",
+      recipientName: null,
+      status: ShipmentStatus.IN_TRANSIT,
+      carrierName: "Carrier",
+      carrierCode: "carrier",
+      trackingNumber: "TRACKING123",
+      trackingProvider: "ship24",
+      providerCarrierCode: null,
+      carrierConnectionStatus: "ACTIVE",
+      carrierRegisteredAt: null,
+      carrierLastSuccessfulSyncAt: null,
+      carrierLastErrorCode: null,
+      carrierLastErrorAt: null,
+      originCity: null,
+      originCountryCode: null,
+      destinationCity: null,
+      destinationCountryCode: null,
+      estimatedDeliveryAt: null,
+      deliveredAt: null,
+      createdAt: new Date("2026-08-01T10:00:00Z"),
+      updatedAt: new Date("2026-08-10T10:00:00Z"),
+      trackingEvents: [],
+    });
+    const [{ getShipmentDetails }, { getPublicShipment }] = await Promise.all([
+      import("@/lib/shipments"),
+      import("@/lib/public-shipments"),
+    ]);
+    const protectedShipment = await getShipmentDetails("shipment");
+    const publicShipment = await getPublicShipment("AbCdEf0123456789_-AbCdEf01234567");
+    expect(protectedShipment?.status).toBe(ShipmentStatus.IN_TRANSIT);
+    expect(publicShipment?.status).toBe(protectedShipment?.status);
+  });
 });
