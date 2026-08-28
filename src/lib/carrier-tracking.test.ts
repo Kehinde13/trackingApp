@@ -101,13 +101,57 @@ describe("authoritative carrier status reconciliation", () => {
     }));
   });
 
+  it("reconciles an explicit snapshot when a successful pull returns zero events", async () => {
+    const { importCarrierTrackingInfo } = await import("@/lib/carrier-tracking");
+    const database = transaction({
+      previousSyncAt: new Date("2026-08-10T12:00:01Z"),
+      imported: 0,
+    });
+    const result = await importCarrierTrackingInfo(
+      database.tx as never,
+      { id: "shipment", trackingNumber: "SAFE_TEST_NUMBER", providerCarrierCode: null },
+      "ship24",
+      { ...julyInfo, events: [] },
+      new Date("2026-08-10T12:00:02Z"),
+      "pull",
+    );
+
+    expect(result.imported).toBe(0);
+    expect(database.createMany).not.toHaveBeenCalled();
+    expect(database.shipmentUpdate).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        status: ShipmentStatus.IN_TRANSIT,
+        carrierLastSuccessfulSyncAt: new Date("2026-08-10T12:00:02Z"),
+        carrierLastErrorCode: null,
+      }),
+    }));
+  });
+
+  it("preserves event-based reconciliation when a zero-event response has no snapshot", async () => {
+    const { importCarrierTrackingInfo } = await import("@/lib/carrier-tracking");
+    const database = transaction({ imported: 0 });
+    const result = await importCarrierTrackingInfo(
+      database.tx as never,
+      { id: "shipment", trackingNumber: "SAFE_TEST_NUMBER", providerCarrierCode: null },
+      "ship24",
+      { events: [] },
+      new Date("2026-08-10T12:00:02Z"),
+      "pull",
+    );
+
+    expect(result.imported).toBe(0);
+    expect(database.shipmentUpdate).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ status: ShipmentStatus.PENDING }),
+    }));
+  });
+
   it("rejects stale provider state and preserves a genuinely newer administrator update", async () => {
     const { reconcileCarrierStatus } = await import("@/lib/carrier-tracking");
     const base = {
       hasAuthoritativeStatus: true,
       authoritativeStatus: ShipmentStatus.IN_TRANSIT,
       authoritativeFreshnessAt: new Date("2026-08-10T12:00:00Z"),
-      authoritativeEvidenceAt: new Date("2026-07-02T10:00:00Z"),
+      authoritativeProviderGeneratedAt: new Date("2026-07-02T10:00:00Z"),
       previousSyncAt: null,
       newestCarrierBefore: new Date("2026-07-03T10:00:00Z"),
       newestAdmin: null,
@@ -127,7 +171,7 @@ describe("authoritative carrier status reconciliation", () => {
     const base = {
       hasAuthoritativeStatus: true,
       authoritativeStatus: ShipmentStatus.IN_TRANSIT,
-      authoritativeEvidenceAt: new Date("2026-08-10T11:00:00Z"),
+      authoritativeProviderGeneratedAt: new Date("2026-08-10T11:00:00Z"),
       previousSyncAt: new Date("2026-08-10T12:00:00Z"),
       newestCarrierBefore: new Date("2026-08-10T10:00:00Z"),
       newestAdmin: null,
@@ -151,7 +195,7 @@ describe("authoritative carrier status reconciliation", () => {
       hasAuthoritativeStatus: true,
       authoritativeStatus: ShipmentStatus.IN_TRANSIT,
       authoritativeFreshnessAt: new Date("2026-08-20T12:00:00Z"),
-      authoritativeEvidenceAt: new Date("2026-08-20T10:00:00Z"),
+      authoritativeProviderGeneratedAt: new Date("2026-08-20T10:00:00Z"),
       previousSyncAt: new Date("2026-08-19T12:00:00Z"),
       newestCarrierBefore: null,
       newestAdmin: new Date("2026-08-20T11:00:00Z"),
@@ -166,7 +210,7 @@ describe("authoritative carrier status reconciliation", () => {
     const base = {
       hasAuthoritativeStatus: true,
       authoritativeFreshnessAt: new Date("2026-07-02T11:00:00Z"),
-      authoritativeEvidenceAt: deliveredAt,
+      authoritativeProviderGeneratedAt: deliveredAt,
       previousSyncAt: null,
       newestCarrierBefore: null,
       newestAdmin: null,
@@ -175,6 +219,8 @@ describe("authoritative carrier status reconciliation", () => {
     };
     expect(reconcileCarrierStatus({ ...base, authoritativeStatus: ShipmentStatus.DELIVERED })).toEqual({ status: ShipmentStatus.DELIVERED, deliveredAt });
     expect(reconcileCarrierStatus({ ...base, authoritativeStatus: ShipmentStatus.RETURNED })).toEqual({ status: ShipmentStatus.RETURNED });
+    expect(reconcileCarrierStatus({ ...base, authoritativeStatus: ShipmentStatus.CANCELLED })).toEqual({ status: ShipmentStatus.CANCELLED });
+    expect(reconcileCarrierStatus({ ...base, authoritativeStatus: ShipmentStatus.EXCEPTION })).toEqual({ status: ShipmentStatus.EXCEPTION });
   });
 });
 

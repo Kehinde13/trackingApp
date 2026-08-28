@@ -101,7 +101,7 @@ type CarrierStatusReconciliationInput = {
   hasAuthoritativeStatus: boolean;
   authoritativeStatus: ShipmentStatus | null;
   authoritativeFreshnessAt: Date | null;
-  authoritativeEvidenceAt: Date | null;
+  authoritativeProviderGeneratedAt: Date | null;
   previousSyncAt: Date | null;
   newestCarrierBefore: Date | null;
   newestAdmin: Date | null;
@@ -113,7 +113,7 @@ export function reconcileCarrierStatus({
   hasAuthoritativeStatus,
   authoritativeStatus,
   authoritativeFreshnessAt,
-  authoritativeEvidenceAt,
+  authoritativeProviderGeneratedAt,
   previousSyncAt,
   newestCarrierBefore,
   newestAdmin,
@@ -121,10 +121,10 @@ export function reconcileCarrierStatus({
   newestDeliveredAt,
 }: CarrierStatusReconciliationInput): { status: ShipmentStatus; deliveredAt?: Date } | null {
   if (hasAuthoritativeStatus) {
-    if (!authoritativeStatus || !authoritativeFreshnessAt || !authoritativeEvidenceAt) return null;
+    if (!authoritativeStatus || !authoritativeFreshnessAt || !authoritativeProviderGeneratedAt) return null;
     if (previousSyncAt && authoritativeFreshnessAt.getTime() < previousSyncAt.getTime()) return null;
-    if (newestCarrierBefore && authoritativeEvidenceAt.getTime() < newestCarrierBefore.getTime()) return null;
-    if (newestAdmin && newestAdmin.getTime() > authoritativeEvidenceAt.getTime()) return null;
+    if (newestCarrierBefore && authoritativeProviderGeneratedAt.getTime() < newestCarrierBefore.getTime()) return null;
+    if (newestAdmin && newestAdmin.getTime() > authoritativeProviderGeneratedAt.getTime()) return null;
     return authoritativeStatus === ShipmentStatus.DELIVERED && newestDeliveredAt
       ? { status: authoritativeStatus, deliveredAt: newestDeliveredAt }
       : { status: authoritativeStatus };
@@ -165,23 +165,25 @@ export async function importCarrierTrackingInfo(
     orderBy: [{ occurredAt: "desc" }, { createdAt: "desc" }, { id: "desc" }],
     select: { occurredAt: true },
   });
-  const createResult = await tx.trackingEvent.createMany({
-    data: importable.map(({ event, mappedStatus }) => ({
-      shipmentId: shipment.id,
-      source: TrackingEventSource.CARRIER,
-      status: mappedStatus ?? storedShipment.status,
-      description: event.description,
-      location: event.location,
-      city: event.city,
-      countryCode: event.countryCode,
-      occurredAt: event.occurredAt,
-      providerOccurredAt: event.providerOccurredAt,
-      providerEventOrder: event.providerEventOrder,
-      statusAffectsShipment: mappedStatus !== null && event.occurredAt !== null,
-      providerEventId: carrierEventId(providerName, shipment.trackingNumber, event),
-    })),
-    skipDuplicates: true,
-  });
+  const createResult = importable.length
+    ? await tx.trackingEvent.createMany({
+        data: importable.map(({ event, mappedStatus }) => ({
+          shipmentId: shipment.id,
+          source: TrackingEventSource.CARRIER,
+          status: mappedStatus ?? storedShipment.status,
+          description: event.description,
+          location: event.location,
+          city: event.city,
+          countryCode: event.countryCode,
+          occurredAt: event.occurredAt,
+          providerOccurredAt: event.providerOccurredAt,
+          providerEventOrder: event.providerEventOrder,
+          statusAffectsShipment: mappedStatus !== null && event.occurredAt !== null,
+          providerEventId: carrierEventId(providerName, shipment.trackingNumber, event),
+        })),
+        skipDuplicates: true,
+      })
+    : { count: 0 };
   const newest = await tx.trackingEvent.findFirst({
     where: { shipmentId: shipment.id, occurredAt: { not: null }, statusAffectsShipment: true },
     orderBy: [{ occurredAt: "desc" }, { createdAt: "desc" }, { id: "desc" }],
@@ -197,19 +199,13 @@ export async function importCarrierTrackingInfo(
     orderBy: [{ occurredAt: "desc" }, { createdAt: "desc" }, { id: "desc" }],
     select: { occurredAt: true },
   });
-  const authoritativeEvidenceAt = authoritativeStatus
-    ? candidates
-        .filter(({ event, mappedStatus }) => mappedStatus === authoritativeStatus && event.occurredAt !== null)
-        .map(({ event }) => event.occurredAt!)
-        .sort((left, right) => right.getTime() - left.getTime())[0] ?? null
-    : null;
   const shipmentStatusUpdate = reconcileCarrierStatus({
     hasAuthoritativeStatus,
     authoritativeStatus,
     authoritativeFreshnessAt: info.currentStatus
       ? snapshotSource === "pull" ? synchronizedAt : info.currentStatus.providerGeneratedAt
       : null,
-    authoritativeEvidenceAt,
+    authoritativeProviderGeneratedAt: info.currentStatus?.providerGeneratedAt ?? null,
     previousSyncAt: storedShipment.carrierLastSuccessfulSyncAt,
     newestCarrierBefore: newestCarrierBefore?.occurredAt ?? null,
     newestAdmin: newestAdmin?.occurredAt ?? null,
