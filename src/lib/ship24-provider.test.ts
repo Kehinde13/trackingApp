@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { normalizeShip24Tracking, parseShip24Timestamp, Ship24Provider } from "@/lib/ship24-provider";
+import { normalizeShip24Tracking, parseShip24Timestamp, Ship24Provider, type Ship24Tracking } from "@/lib/ship24-provider";
 import { TRACKING_ERROR_CODES } from "@/lib/tracking-provider";
 
 const tracker = { trackerId: "trk_test_001", trackingNumber: "FAKE123456", clientTrackerId: "parceltrack:00000000-0000-4000-8000-000000000001", courierCode: "mock-courier" };
@@ -22,6 +22,13 @@ describe("Ship24 provider", () => {
     expect((fetcher.mock.calls[0] as unknown as [string])[0]).toBe(`https://api.ship24.com/public/v1/trackers/${tracker.trackerId}/results`);
     expect(result.events[0]).toMatchObject({ stableId: "evt-1", occurredAt: new Date("2026-08-20T10:00:00Z"), providerEventOrder: 1, providerStatus: "in_transit" });
     expect(result.currentStatus).toEqual({ providerStatus: "in_transit", providerGeneratedAt: new Date("2026-08-20T11:00:00Z") });
+  });
+  it.each<[Ship24Tracking, string]>([
+    [{ tracker, events: [] }, "snapshot_absent"],
+    [{ tracker, shipment: { statusCode: null, statusMilestone: "in_transit" }, events: [] }, "snapshot_missing_generated_at"],
+    [{ metadata: { generatedAt: "not-a-valid-date" }, tracker, shipment: { statusCode: null, statusMilestone: "in_transit" }, events: [] }, "snapshot_invalid_generated_at"],
+  ])("reports a safe snapshot normalization outcome", (tracking, outcome) => {
+    expect(normalizeShip24Tracking(tracking).snapshotAbsenceReason).toBe(outcome);
   });
   it.each([["2026-08-20T10:00:00Z", "2026-08-20T10:00:00.000Z"], ["2026-08-20T10:00:00+02:00", "2026-08-20T08:00:00.000Z"], ["2026-08-20T10:00:00", null], ["2026-08-20", null]])("preserves timestamp semantics for %s", (input, expected) => {
     const parsed = parseShip24Timestamp(input);

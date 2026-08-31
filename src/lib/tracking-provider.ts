@@ -28,6 +28,11 @@ export type NormalizedCarrierEvent = {
   countryCode?: string;
 };
 
+export type SnapshotAbsenceReason =
+  | "snapshot_absent"
+  | "snapshot_missing_generated_at"
+  | "snapshot_invalid_generated_at";
+
 export type TrackingInfo = {
   carrierCode?: string;
   currentStatus?: {
@@ -35,6 +40,7 @@ export type TrackingInfo = {
     providerSubStatus?: string;
     providerGeneratedAt: Date;
   };
+  snapshotAbsenceReason?: SnapshotAbsenceReason;
   events: NormalizedCarrierEvent[];
 };
 

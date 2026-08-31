@@ -11,6 +11,7 @@ import {
   carrierEventId,
   trackingRequestSchema,
   type NormalizedCarrierEvent,
+  type SnapshotAbsenceReason,
   type TrackingInfo,
   type TrackingProvider,
 } from "@/lib/tracking-provider";
@@ -96,9 +97,27 @@ type CarrierImportShipment = {
 };
 
 type StatusPoint = { status: ShipmentStatus; occurredAt: Date };
+type ShipmentStatusUpdate = { status: ShipmentStatus; deliveredAt?: Date };
+
+export type StatusReconciliationOutcome =
+  | SnapshotAbsenceReason
+  | "provider_without_snapshot"
+  | "snapshot_status_unmapped"
+  | "stale_snapshot"
+  | "stale_carrier"
+  | "admin_precedence"
+  | "already_current"
+  | "applied";
+
+export type CarrierStatusReconciliationResult = {
+  statusUpdate: ShipmentStatusUpdate | null;
+  outcome: StatusReconciliationOutcome;
+};
 
 type CarrierStatusReconciliationInput = {
   hasAuthoritativeStatus: boolean;
+  snapshotAbsenceReason?: SnapshotAbsenceReason;
+  storedStatus: ShipmentStatus;
   authoritativeStatus: ShipmentStatus | null;
   authoritativeFreshnessAt: Date | null;
   authoritativeProviderGeneratedAt: Date | null;
@@ -111,6 +130,8 @@ type CarrierStatusReconciliationInput = {
 
 export function reconcileCarrierStatus({
   hasAuthoritativeStatus,
+  snapshotAbsenceReason,
+  storedStatus,
   authoritativeStatus,
   authoritativeFreshnessAt,
   authoritativeProviderGeneratedAt,
@@ -119,21 +140,35 @@ export function reconcileCarrierStatus({
   newestAdmin,
   fallbackNewest,
   newestDeliveredAt,
-}: CarrierStatusReconciliationInput): { status: ShipmentStatus; deliveredAt?: Date } | null {
+}: CarrierStatusReconciliationInput): CarrierStatusReconciliationResult {
   if (hasAuthoritativeStatus) {
-    if (!authoritativeStatus || !authoritativeFreshnessAt || !authoritativeProviderGeneratedAt) return null;
-    if (previousSyncAt && authoritativeFreshnessAt.getTime() < previousSyncAt.getTime()) return null;
-    if (newestCarrierBefore && authoritativeProviderGeneratedAt.getTime() < newestCarrierBefore.getTime()) return null;
-    if (newestAdmin && newestAdmin.getTime() > authoritativeProviderGeneratedAt.getTime()) return null;
-    return authoritativeStatus === ShipmentStatus.DELIVERED && newestDeliveredAt
+    if (!authoritativeStatus) return { statusUpdate: null, outcome: "snapshot_status_unmapped" };
+    if (!authoritativeFreshnessAt) return { statusUpdate: null, outcome: "snapshot_absent" };
+    if (!authoritativeProviderGeneratedAt) return { statusUpdate: null, outcome: "snapshot_missing_generated_at" };
+    if (previousSyncAt && authoritativeFreshnessAt.getTime() < previousSyncAt.getTime()) {
+      return { statusUpdate: null, outcome: "stale_snapshot" };
+    }
+    if (newestCarrierBefore && authoritativeProviderGeneratedAt.getTime() < newestCarrierBefore.getTime()) {
+      return { statusUpdate: null, outcome: "stale_carrier" };
+    }
+    if (newestAdmin && newestAdmin.getTime() > authoritativeProviderGeneratedAt.getTime()) {
+      return { statusUpdate: null, outcome: "admin_precedence" };
+    }
+    const statusUpdate = authoritativeStatus === ShipmentStatus.DELIVERED && newestDeliveredAt
       ? { status: authoritativeStatus, deliveredAt: newestDeliveredAt }
       : { status: authoritativeStatus };
+    return { statusUpdate, outcome: authoritativeStatus === storedStatus ? "already_current" : "applied" };
   }
 
-  if (!fallbackNewest) return null;
-  return fallbackNewest.status === ShipmentStatus.DELIVERED
+  const statusUpdate = !fallbackNewest
+    ? null
+    : fallbackNewest.status === ShipmentStatus.DELIVERED
     ? { status: fallbackNewest.status, deliveredAt: fallbackNewest.occurredAt }
     : { status: fallbackNewest.status };
+  return {
+    statusUpdate,
+    outcome: snapshotAbsenceReason ?? "provider_without_snapshot",
+  };
 }
 
 export async function importCarrierTrackingInfo(
@@ -199,8 +234,10 @@ export async function importCarrierTrackingInfo(
     orderBy: [{ occurredAt: "desc" }, { createdAt: "desc" }, { id: "desc" }],
     select: { occurredAt: true },
   });
-  const shipmentStatusUpdate = reconcileCarrierStatus({
+  const reconciliation = reconcileCarrierStatus({
     hasAuthoritativeStatus,
+    snapshotAbsenceReason: info.snapshotAbsenceReason,
+    storedStatus: storedShipment.status,
     authoritativeStatus,
     authoritativeFreshnessAt: info.currentStatus
       ? snapshotSource === "pull" ? synchronizedAt : info.currentStatus.providerGeneratedAt
@@ -219,9 +256,9 @@ export async function importCarrierTrackingInfo(
     carrierLastErrorCode: warning,
     carrierLastErrorAt: warning ? synchronizedAt : null,
   };
-  if (shipmentStatusUpdate) Object.assign(data, shipmentStatusUpdate);
+  if (reconciliation.statusUpdate) Object.assign(data, reconciliation.statusUpdate);
   await tx.shipment.update({ where: { id: shipment.id }, data });
-  return { imported: createResult.count, warning };
+  return { imported: createResult.count, warning, reconciliationOutcome: reconciliation.outcome };
 }
 
 export async function syncShipmentTracking(

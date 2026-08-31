@@ -7,6 +7,7 @@ import {
   TrackingProviderError,
   trackingRequestSchema,
   type NormalizedCarrierEvent,
+  type SnapshotAbsenceReason,
   type TrackingInfo,
   type TrackingProvider,
   type TrackingRequest,
@@ -129,6 +130,13 @@ export function normalizeShip24Tracking(tracking: Ship24Tracking): TrackingInfo 
     ? tracking.tracker.courierCode
     : [tracking.tracker.courierCode];
   const providerGeneratedAt = parseGeneratedAt(tracking.metadata?.generatedAt);
+  const snapshotAbsenceReason: SnapshotAbsenceReason | undefined = !tracking.shipment
+    ? "snapshot_absent"
+    : !tracking.metadata?.generatedAt
+      ? "snapshot_missing_generated_at"
+      : !providerGeneratedAt
+        ? "snapshot_invalid_generated_at"
+        : undefined;
   const currentStatus = tracking.shipment && providerGeneratedAt
     ? {
         providerStatus: tracking.shipment.statusMilestone,
@@ -139,6 +147,7 @@ export function normalizeShip24Tracking(tracking: Ship24Tracking): TrackingInfo 
   return {
     carrierCode: codes.map((value) => safeCourierCode(value)).find(Boolean),
     ...(currentStatus ? { currentStatus } : {}),
+    ...(snapshotAbsenceReason ? { snapshotAbsenceReason } : {}),
     events,
   };
 }

@@ -53,6 +53,47 @@ function transaction(options: { previousSyncAt?: Date | null; status?: ShipmentS
 describe("authoritative carrier status reconciliation", () => {
   beforeEach(() => vi.clearAllMocks());
 
+  it.each([
+    ["snapshot_absent", "snapshot_absent"],
+    ["snapshot_missing_generated_at", "snapshot_missing_generated_at"],
+    ["snapshot_invalid_generated_at", "snapshot_invalid_generated_at"],
+    [undefined, "provider_without_snapshot"],
+  ] as const)("returns the safe absence outcome %s without changing fallback behavior", async (reason, outcome) => {
+    const { reconcileCarrierStatus } = await import("@/lib/carrier-tracking");
+    expect(reconcileCarrierStatus({
+      hasAuthoritativeStatus: false,
+      ...(reason ? { snapshotAbsenceReason: reason } : {}),
+      storedStatus: ShipmentStatus.PENDING,
+      authoritativeStatus: null,
+      authoritativeFreshnessAt: null,
+      authoritativeProviderGeneratedAt: null,
+      previousSyncAt: null,
+      newestCarrierBefore: null,
+      newestAdmin: null,
+      fallbackNewest: null,
+      newestDeliveredAt: null,
+    })).toEqual({ statusUpdate: null, outcome });
+  });
+
+  it("reports malformed or unmapped authoritative snapshots without changing status", async () => {
+    const { reconcileCarrierStatus } = await import("@/lib/carrier-tracking");
+    const base = {
+      hasAuthoritativeStatus: true,
+      storedStatus: ShipmentStatus.PENDING,
+      authoritativeStatus: ShipmentStatus.IN_TRANSIT,
+      authoritativeFreshnessAt: new Date("2026-08-10T12:00:00Z"),
+      authoritativeProviderGeneratedAt: new Date("2026-08-10T11:00:00Z"),
+      previousSyncAt: null,
+      newestCarrierBefore: null,
+      newestAdmin: null,
+      fallbackNewest: null,
+      newestDeliveredAt: null,
+    };
+    expect(reconcileCarrierStatus({ ...base, authoritativeStatus: null })).toEqual({ statusUpdate: null, outcome: "snapshot_status_unmapped" });
+    expect(reconcileCarrierStatus({ ...base, authoritativeProviderGeneratedAt: null })).toEqual({ statusUpdate: null, outcome: "snapshot_missing_generated_at" });
+    expect(reconcileCarrierStatus({ ...base, authoritativeFreshnessAt: null })).toEqual({ statusUpdate: null, outcome: "snapshot_absent" });
+  });
+
   it("applies an explicit current milestone over a newer SYSTEM event while retaining history", async () => {
     const { importCarrierTrackingInfo } = await import("@/lib/carrier-tracking");
     const database = transaction();
@@ -93,6 +134,7 @@ describe("authoritative carrier status reconciliation", () => {
       "pull",
     );
     expect(result.imported).toBe(0);
+    expect(result.reconciliationOutcome).toBe("already_current");
     expect(database.shipmentUpdate).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({
         status: ShipmentStatus.IN_TRANSIT,
@@ -117,6 +159,7 @@ describe("authoritative carrier status reconciliation", () => {
     );
 
     expect(result.imported).toBe(0);
+    expect(result.reconciliationOutcome).toBe("applied");
     expect(database.createMany).not.toHaveBeenCalled();
     expect(database.shipmentUpdate).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({
@@ -140,6 +183,7 @@ describe("authoritative carrier status reconciliation", () => {
     );
 
     expect(result.imported).toBe(0);
+    expect(result.reconciliationOutcome).toBe("provider_without_snapshot");
     expect(database.shipmentUpdate).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({ status: ShipmentStatus.PENDING }),
     }));
@@ -149,6 +193,7 @@ describe("authoritative carrier status reconciliation", () => {
     const { reconcileCarrierStatus } = await import("@/lib/carrier-tracking");
     const base = {
       hasAuthoritativeStatus: true,
+      storedStatus: ShipmentStatus.PENDING,
       authoritativeStatus: ShipmentStatus.IN_TRANSIT,
       authoritativeFreshnessAt: new Date("2026-08-10T12:00:00Z"),
       authoritativeProviderGeneratedAt: new Date("2026-07-02T10:00:00Z"),
@@ -158,18 +203,19 @@ describe("authoritative carrier status reconciliation", () => {
       fallbackNewest: { status: ShipmentStatus.PENDING, occurredAt: new Date("2026-08-01T10:00:00Z") },
       newestDeliveredAt: null,
     };
-    expect(reconcileCarrierStatus(base)).toBeNull();
+    expect(reconcileCarrierStatus(base)).toEqual({ statusUpdate: null, outcome: "stale_carrier" });
     expect(reconcileCarrierStatus({
       ...base,
       newestCarrierBefore: null,
       newestAdmin: new Date("2026-07-03T10:00:00Z"),
-    })).toBeNull();
+    })).toEqual({ statusUpdate: null, outcome: "admin_precedence" });
   });
 
   it("orders webhook snapshots by provider generation time instead of receipt time", async () => {
     const { reconcileCarrierStatus } = await import("@/lib/carrier-tracking");
     const base = {
       hasAuthoritativeStatus: true,
+      storedStatus: ShipmentStatus.PENDING,
       authoritativeStatus: ShipmentStatus.IN_TRANSIT,
       authoritativeProviderGeneratedAt: new Date("2026-08-10T11:00:00Z"),
       previousSyncAt: new Date("2026-08-10T12:00:00Z"),
@@ -182,17 +228,18 @@ describe("authoritative carrier status reconciliation", () => {
     expect(reconcileCarrierStatus({
       ...base,
       authoritativeFreshnessAt: new Date("2026-08-10T11:59:59Z"),
-    })).toBeNull();
+    })).toEqual({ statusUpdate: null, outcome: "stale_snapshot" });
     expect(reconcileCarrierStatus({
       ...base,
       authoritativeFreshnessAt: new Date("2026-08-10T12:00:01Z"),
-    })).toEqual({ status: ShipmentStatus.IN_TRANSIT });
+    })).toEqual({ statusUpdate: { status: ShipmentStatus.IN_TRANSIT }, outcome: "applied" });
   });
 
   it("keeps a genuinely newer administrator update authoritative during provider reconciliation", async () => {
     const { reconcileCarrierStatus } = await import("@/lib/carrier-tracking");
     expect(reconcileCarrierStatus({
       hasAuthoritativeStatus: true,
+      storedStatus: ShipmentStatus.PENDING,
       authoritativeStatus: ShipmentStatus.IN_TRANSIT,
       authoritativeFreshnessAt: new Date("2026-08-20T12:00:00Z"),
       authoritativeProviderGeneratedAt: new Date("2026-08-20T10:00:00Z"),
@@ -201,7 +248,7 @@ describe("authoritative carrier status reconciliation", () => {
       newestAdmin: new Date("2026-08-20T11:00:00Z"),
       fallbackNewest: { status: ShipmentStatus.DELAYED, occurredAt: new Date("2026-08-20T11:00:00Z") },
       newestDeliveredAt: null,
-    })).toBeNull();
+    })).toEqual({ statusUpdate: null, outcome: "admin_precedence" });
   });
 
   it("preserves delivery time and supports later non-linear authoritative states", async () => {
@@ -209,6 +256,7 @@ describe("authoritative carrier status reconciliation", () => {
     const deliveredAt = new Date("2026-07-02T10:00:00Z");
     const base = {
       hasAuthoritativeStatus: true,
+      storedStatus: ShipmentStatus.PENDING,
       authoritativeFreshnessAt: new Date("2026-07-02T11:00:00Z"),
       authoritativeProviderGeneratedAt: deliveredAt,
       previousSyncAt: null,
@@ -217,10 +265,10 @@ describe("authoritative carrier status reconciliation", () => {
       fallbackNewest: null,
       newestDeliveredAt: deliveredAt,
     };
-    expect(reconcileCarrierStatus({ ...base, authoritativeStatus: ShipmentStatus.DELIVERED })).toEqual({ status: ShipmentStatus.DELIVERED, deliveredAt });
-    expect(reconcileCarrierStatus({ ...base, authoritativeStatus: ShipmentStatus.RETURNED })).toEqual({ status: ShipmentStatus.RETURNED });
-    expect(reconcileCarrierStatus({ ...base, authoritativeStatus: ShipmentStatus.CANCELLED })).toEqual({ status: ShipmentStatus.CANCELLED });
-    expect(reconcileCarrierStatus({ ...base, authoritativeStatus: ShipmentStatus.EXCEPTION })).toEqual({ status: ShipmentStatus.EXCEPTION });
+    expect(reconcileCarrierStatus({ ...base, authoritativeStatus: ShipmentStatus.DELIVERED })).toEqual({ statusUpdate: { status: ShipmentStatus.DELIVERED, deliveredAt }, outcome: "applied" });
+    expect(reconcileCarrierStatus({ ...base, authoritativeStatus: ShipmentStatus.RETURNED })).toEqual({ statusUpdate: { status: ShipmentStatus.RETURNED }, outcome: "applied" });
+    expect(reconcileCarrierStatus({ ...base, authoritativeStatus: ShipmentStatus.CANCELLED })).toEqual({ statusUpdate: { status: ShipmentStatus.CANCELLED }, outcome: "applied" });
+    expect(reconcileCarrierStatus({ ...base, authoritativeStatus: ShipmentStatus.EXCEPTION })).toEqual({ statusUpdate: { status: ShipmentStatus.EXCEPTION }, outcome: "applied" });
   });
 });
 

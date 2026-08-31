@@ -39,7 +39,10 @@ export async function syncCarrierAction(shipmentId: string, state: CarrierAction
   try {
     const result = await syncShipmentTracking(shipmentId);
     revalidatePath("/admin"); revalidatePath(`/admin/packages/${shipmentId}`);
-    return { success: true, message: `Synchronization complete. ${result.imported} new event${result.imported === 1 ? "" : "s"} imported.` };
+    return {
+      success: true,
+      message: `Synchronization complete. ${result.imported} new event${result.imported === 1 ? "" : "s"} imported. Status reconciliation: ${result.reconciliationOutcome}`,
+    };
   } catch {
     return { success: false, message: "Unable to synchronize carrier tracking. Please try again." };
   }

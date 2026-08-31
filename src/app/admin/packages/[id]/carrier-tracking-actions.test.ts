@@ -35,4 +35,15 @@ describe("carrier tracking administrator actions", () => {
     expect(result.message).toBe("Administrator access is required.");
     expect(syncShipmentTracking).not.toHaveBeenCalled();
   });
+
+  it("returns only the safe reconciliation outcome to an authenticated administrator", async () => {
+    requireAdminForMutation.mockResolvedValue({ user: { role: "admin" } });
+    syncShipmentTracking.mockResolvedValue({ imported: 0, warning: null, reconciliationOutcome: "stale_carrier" });
+    const { syncCarrierAction } = await import("./carrier-tracking-actions");
+    const result = await syncCarrierAction(shipmentId, state);
+    expect(result).toEqual({
+      success: true,
+      message: "Synchronization complete. 0 new events imported. Status reconciliation: stale_carrier",
+    });
+  });
 });
