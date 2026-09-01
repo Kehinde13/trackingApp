@@ -28,7 +28,9 @@ describe("Ship24 provider", () => {
     [{ tracker, shipment: { statusCode: null, statusMilestone: "in_transit" }, events: [] }, "snapshot_missing_generated_at"],
     [{ metadata: { generatedAt: "not-a-valid-date" }, tracker, shipment: { statusCode: null, statusMilestone: "in_transit" }, events: [] }, "snapshot_invalid_generated_at"],
   ])("reports a safe snapshot normalization outcome", (tracking, outcome) => {
-    expect(normalizeShip24Tracking(tracking).snapshotAbsenceReason).toBe(outcome);
+    const normalized = normalizeShip24Tracking(tracking);
+    expect(normalized.snapshotAbsenceReason).toBe(outcome);
+    if (tracking.shipment) expect(normalized.currentStatus?.providerStatus).toBe("in_transit");
   });
   it.each([["2026-08-20T10:00:00Z", "2026-08-20T10:00:00.000Z"], ["2026-08-20T10:00:00+02:00", "2026-08-20T08:00:00.000Z"], ["2026-08-20T10:00:00", null], ["2026-08-20", null]])("preserves timestamp semantics for %s", (input, expected) => {
     const parsed = parseShip24Timestamp(input);

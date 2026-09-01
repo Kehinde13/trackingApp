@@ -25,12 +25,18 @@ const julyInfo: TrackingInfo = {
   ],
 };
 
-function transaction(options: { previousSyncAt?: Date | null; status?: ShipmentStatus; imported?: number } = {}) {
+const julyInfoWithoutGeneratedAt: TrackingInfo = {
+  currentStatus: { providerStatus: "in_transit" },
+  snapshotAbsenceReason: "snapshot_missing_generated_at",
+  events: julyInfo.events,
+};
+
+function transaction(options: { previousSyncAt?: Date | null; status?: ShipmentStatus; imported?: number; adminAt?: Date | null } = {}) {
   const shipmentUpdate = vi.fn();
   const createMany = vi.fn().mockResolvedValue({ count: options.imported ?? 2 });
   const findFirst = vi.fn(async ({ where }: { where: Record<string, unknown> }) => {
     if (where.source === TrackingEventSource.CARRIER) return options.previousSyncAt ? { occurredAt: new Date("2026-07-02T10:00:00Z") } : null;
-    if (where.source === TrackingEventSource.ADMIN) return null;
+    if (where.source === TrackingEventSource.ADMIN) return options.adminAt ? { occurredAt: options.adminAt } : null;
     if (where.status === ShipmentStatus.DELIVERED) return null;
     return { status: ShipmentStatus.PENDING, occurredAt: new Date("2026-08-01T10:00:00Z") };
   });
@@ -170,6 +176,96 @@ describe("authoritative carrier status reconciliation", () => {
     }));
   });
 
+  it("applies a pulled milestone without provider generation time when all events are duplicates", async () => {
+    const { importCarrierTrackingInfo } = await import("@/lib/carrier-tracking");
+    const database = transaction({ previousSyncAt: new Date("2026-08-10T12:00:01Z"), imported: 0 });
+    const result = await importCarrierTrackingInfo(
+      database.tx as never,
+      { id: "shipment", trackingNumber: "SAFE_TEST_NUMBER", providerCarrierCode: null },
+      "ship24",
+      julyInfoWithoutGeneratedAt,
+      new Date("2026-08-10T12:00:02Z"),
+      "pull",
+    );
+
+    expect(result).toMatchObject({ imported: 0, warning: null, reconciliationOutcome: "applied" });
+    expect(database.shipmentUpdate).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ status: ShipmentStatus.IN_TRANSIT }),
+    }));
+  });
+
+  it("keeps a repeated missing-timestamp pull idempotent", async () => {
+    const { importCarrierTrackingInfo } = await import("@/lib/carrier-tracking");
+    const database = transaction({
+      previousSyncAt: new Date("2026-08-10T12:00:01Z"),
+      status: ShipmentStatus.IN_TRANSIT,
+      imported: 0,
+    });
+    const result = await importCarrierTrackingInfo(
+      database.tx as never,
+      { id: "shipment", trackingNumber: "SAFE_TEST_NUMBER", providerCarrierCode: null },
+      "ship24",
+      { ...julyInfoWithoutGeneratedAt, events: [] },
+      new Date("2026-08-10T12:00:02Z"),
+      "pull",
+    );
+
+    expect(result).toMatchObject({ imported: 0, reconciliationOutcome: "already_current" });
+    expect(database.createMany).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["snapshot_missing_generated_at", "snapshot_missing_generated_at"],
+    ["snapshot_invalid_generated_at", "snapshot_invalid_generated_at"],
+  ] as const)("rejects a webhook with %s", async (snapshotAbsenceReason, expected) => {
+    const { importCarrierTrackingInfo } = await import("@/lib/carrier-tracking");
+    const database = transaction({ previousSyncAt: new Date("2026-08-10T12:00:01Z"), imported: 0 });
+    const result = await importCarrierTrackingInfo(
+      database.tx as never,
+      { id: "shipment", trackingNumber: "SAFE_TEST_NUMBER", providerCarrierCode: null },
+      "ship24",
+      { currentStatus: { providerStatus: "in_transit" }, snapshotAbsenceReason, events: [] },
+      new Date("2026-08-10T12:00:02Z"),
+      "webhook",
+    );
+    expect(result.reconciliationOutcome).toBe(expected);
+    expect(database.shipmentUpdate.mock.calls[0][0].data).not.toHaveProperty("status");
+  });
+
+  it("does not apply the missing-timestamp pull fallback to an invalid timestamp", async () => {
+    const { importCarrierTrackingInfo } = await import("@/lib/carrier-tracking");
+    const database = transaction({ imported: 0 });
+    const result = await importCarrierTrackingInfo(
+      database.tx as never,
+      { id: "shipment", trackingNumber: "SAFE_TEST_NUMBER", providerCarrierCode: null },
+      "ship24",
+      {
+        currentStatus: { providerStatus: "in_transit" },
+        snapshotAbsenceReason: "snapshot_invalid_generated_at",
+        events: [],
+      },
+      new Date("2026-08-10T12:00:02Z"),
+      "pull",
+    );
+    expect(result.reconciliationOutcome).toBe("snapshot_invalid_generated_at");
+    expect(database.shipmentUpdate.mock.calls[0][0].data).not.toHaveProperty("status");
+  });
+
+  it("does not let the pull fallback bypass a newer administrator authority time", async () => {
+    const { importCarrierTrackingInfo } = await import("@/lib/carrier-tracking");
+    const database = transaction({ adminAt: new Date("2026-08-10T12:00:03Z"), imported: 0 });
+    const result = await importCarrierTrackingInfo(
+      database.tx as never,
+      { id: "shipment", trackingNumber: "SAFE_TEST_NUMBER", providerCarrierCode: null },
+      "ship24",
+      { ...julyInfoWithoutGeneratedAt, events: [] },
+      new Date("2026-08-10T12:00:02Z"),
+      "pull",
+    );
+    expect(result.reconciliationOutcome).toBe("admin_precedence");
+    expect(database.shipmentUpdate.mock.calls[0][0].data).not.toHaveProperty("status");
+  });
+
   it("preserves event-based reconciliation when a zero-event response has no snapshot", async () => {
     const { importCarrierTrackingInfo } = await import("@/lib/carrier-tracking");
     const database = transaction({ imported: 0 });
@@ -289,7 +385,7 @@ describe("carrier synchronization failures", () => {
       name: "ship24",
       enabled: true,
       registerTracking: vi.fn(),
-      getTrackingInfo: vi.fn().mockResolvedValue(julyInfo),
+      getTrackingInfo: vi.fn().mockResolvedValue(julyInfoWithoutGeneratedAt),
     };
     const database = transaction({ previousSyncAt: new Date("2026-08-19T12:00:00Z"), imported: 0 });
     runTransaction.mockImplementation(async (callback) => callback(database.tx));

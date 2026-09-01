@@ -38,7 +38,7 @@ export type TrackingInfo = {
   currentStatus?: {
     providerStatus: string;
     providerSubStatus?: string;
-    providerGeneratedAt: Date;
+    providerGeneratedAt?: Date;
   };
   snapshotAbsenceReason?: SnapshotAbsenceReason;
   events: NormalizedCarrierEvent[];

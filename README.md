@@ -74,8 +74,9 @@ When a provider supplies an explicit current shipment status, ParcelTrack uses
 that authoritative snapshot without rewriting the historical event occurrence
 times, including when every event is already stored or the response contains no
 events. A successful administrator-initiated pull assigns its observation time
-on the server; a webhook retains the provider-generated time for stale-delivery
-ordering. Genuinely newer administrator updates retain precedence, and the
+on the server and may use it when the provider omits its generation timestamp;
+a webhook still requires provider-generated time for stale-delivery ordering.
+Genuinely newer administrator updates retain precedence, and the
 system-created Pending event remains an audit event rather than overriding a
 freshly observed provider status.
 Unknown provider statuses are recorded as a safe warning and do not change the

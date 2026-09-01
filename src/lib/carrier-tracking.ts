@@ -143,8 +143,12 @@ export function reconcileCarrierStatus({
 }: CarrierStatusReconciliationInput): CarrierStatusReconciliationResult {
   if (hasAuthoritativeStatus) {
     if (!authoritativeStatus) return { statusUpdate: null, outcome: "snapshot_status_unmapped" };
-    if (!authoritativeFreshnessAt) return { statusUpdate: null, outcome: "snapshot_absent" };
-    if (!authoritativeProviderGeneratedAt) return { statusUpdate: null, outcome: "snapshot_missing_generated_at" };
+    if (!authoritativeFreshnessAt) {
+      return { statusUpdate: null, outcome: snapshotAbsenceReason ?? "snapshot_absent" };
+    }
+    if (!authoritativeProviderGeneratedAt) {
+      return { statusUpdate: null, outcome: snapshotAbsenceReason ?? "snapshot_missing_generated_at" };
+    }
     if (previousSyncAt && authoritativeFreshnessAt.getTime() < previousSyncAt.getTime()) {
       return { statusUpdate: null, outcome: "stale_snapshot" };
     }
@@ -240,9 +244,15 @@ export async function importCarrierTrackingInfo(
     storedStatus: storedShipment.status,
     authoritativeStatus,
     authoritativeFreshnessAt: info.currentStatus
-      ? snapshotSource === "pull" ? synchronizedAt : info.currentStatus.providerGeneratedAt
+      ? snapshotSource === "pull" ? synchronizedAt : info.currentStatus.providerGeneratedAt ?? null
       : null,
-    authoritativeProviderGeneratedAt: info.currentStatus?.providerGeneratedAt ?? null,
+    authoritativeProviderGeneratedAt: info.currentStatus
+      ? info.currentStatus.providerGeneratedAt ?? (
+          snapshotSource === "pull" && info.snapshotAbsenceReason === "snapshot_missing_generated_at"
+            ? synchronizedAt
+            : null
+        )
+      : null,
     previousSyncAt: storedShipment.carrierLastSuccessfulSyncAt,
     newestCarrierBefore: newestCarrierBefore?.occurredAt ?? null,
     newestAdmin: newestAdmin?.occurredAt ?? null,

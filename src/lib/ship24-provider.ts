@@ -137,11 +137,11 @@ export function normalizeShip24Tracking(tracking: Ship24Tracking): TrackingInfo 
       : !providerGeneratedAt
         ? "snapshot_invalid_generated_at"
         : undefined;
-  const currentStatus = tracking.shipment && providerGeneratedAt
+  const currentStatus = tracking.shipment
     ? {
         providerStatus: tracking.shipment.statusMilestone,
         ...(tracking.shipment.statusCode ? { providerSubStatus: tracking.shipment.statusCode } : {}),
-        providerGeneratedAt,
+        ...(providerGeneratedAt ? { providerGeneratedAt } : {}),
       }
     : undefined;
   return {
